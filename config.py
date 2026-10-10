@@ -30,21 +30,13 @@ class Settings(BaseSettings):
     # haven't been accepted yet are downloaded to an ephemeral OS temp
     # directory (created and cleaned up per-run) instead of anywhere under
     # this tree.
-    base_dir: Path = Field(default=Path(__file__).parent)
     images_dir: Path = Field(default=Path(__file__).parent / "images")
 
     # --- Pipeline tuning ---------------------------------------------------
     request_timeout_seconds: float = Field(default=15.0, gt=0)
 
-    # --- Secrets (names only; real values come from the environment) -------
-    google_api_key: str | None = None
-    google_cse_id: str | None = None
-    bing_api_key: str | None = None
+    # --- Secrets (real values come from the environment / .env, never the code) --
     serpapi_api_key: str | None = None
-    brave_api_key: str | None = None
-    openai_api_key: str | None = None
-    anthropic_api_key: str | None = None
-    google_genai_api_key: str | None = None
     # `validation_alias` bypasses `env_prefix` for this one field: the NVIDIA
     # Build key is conventionally set as a bare `NVIDIA_API_KEY` (matching
     # `classifier/nemotron.py` and NVIDIA's own docs), not `PIR_NVIDIA_API_KEY`.

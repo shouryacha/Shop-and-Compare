@@ -31,7 +31,10 @@ from unittest.mock import patch
 import pytest
 
 from classifier.nemotron import NemotronVisionModel
-from prompts import PRODUCT_MATCH_VERIFICATION_SYSTEM_PROMPT, render_product_match_verification_prompt
+from prompts import (
+    PRODUCT_MATCH_VERIFICATION_SYSTEM_PROMPT,
+    render_product_match_verification_prompt,
+)
 
 _T = TypeVar("_T")
 
@@ -58,7 +61,10 @@ def _model() -> NemotronVisionModel:
 def test_build_match_messages_includes_candidate_title_when_provided() -> None:
     model = _model()
     messages = model._build_match_messages(
-        "base64data", "image/jpeg", "Kohinoor Charminar Sel Bsmti Rice 1KG PP", "Charminar Long Grain, 1kg"
+        "base64data",
+        "image/jpeg",
+        "Kohinoor Charminar Sel Bsmti Rice 1KG PP",
+        "Charminar Long Grain, 1kg",
     )
     user_text = messages[1]["content"][0]["text"]
     assert "Charminar Long Grain, 1kg" in user_text
@@ -113,7 +119,14 @@ def test_verify_product_match_defaults_candidate_title_to_none(image_path: Path)
     async def fake_classify(messages: list[dict[str, Any]]) -> str:
         captured_messages.extend(messages)
         return json.dumps(
-            {"is_match": True, "confidence": 0.95, "reason": "ok", "brand": None, "product_name": None, "weight": None}
+            {
+                "is_match": True,
+                "confidence": 0.95,
+                "reason": "ok",
+                "brand": None,
+                "product_name": None,
+                "weight": None,
+            }
         )
 
     with patch.object(NemotronVisionModel, "_classify", side_effect=fake_classify):
@@ -142,6 +155,9 @@ def test_render_prompt_matches_what_build_match_messages_sends() -> None:
     )
     model = _model()
     messages = model._build_match_messages(
-        "base64data", "image/jpeg", "Kohinoor Charminar Sel Bsmti Rice 1KG PP", "Charminar Long Grain, 1kg"
+        "base64data",
+        "image/jpeg",
+        "Kohinoor Charminar Sel Bsmti Rice 1KG PP",
+        "Charminar Long Grain, 1kg",
     )
     assert messages[1]["content"][0]["text"] == rendered

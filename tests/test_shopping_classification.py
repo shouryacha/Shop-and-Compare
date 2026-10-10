@@ -18,7 +18,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
-from collections.abc import Coroutine
+from collections.abc import Coroutine, Sequence
 from pathlib import Path
 from typing import Any, TypeVar
 from unittest.mock import patch
@@ -61,14 +61,26 @@ def _fake_response(classifications: list[dict[str, Any]]) -> str:
 # --- happy path: every image gets its own independent verdict, in order ----
 
 
-def test_classify_shopping_offers_returns_one_verdict_per_image_in_order(image_paths: Path) -> None:
+def test_classify_shopping_offers_returns_one_verdict_per_image_in_order(
+    image_paths: list[Path],
+) -> None:
     model = _model()
 
     async def fake_classify(messages: list[dict[str, Any]], **kwargs: Any) -> str:
         return _fake_response(
             [
-                {"image_index": 2, "classification": "different_variant", "confidence": 0.9, "reason": "b"},
-                {"image_index": 1, "classification": "same_product", "confidence": 0.95, "reason": "a"},
+                {
+                    "image_index": 2,
+                    "classification": "different_variant",
+                    "confidence": 0.9,
+                    "reason": "b",
+                },
+                {
+                    "image_index": 1,
+                    "classification": "same_product",
+                    "confidence": 0.95,
+                    "reason": "a",
+                },
                 {
                     "image_index": 3,
                     "classification": "same_product_different_size",
@@ -96,7 +108,7 @@ def test_classify_shopping_offers_returns_one_verdict_per_image_in_order(image_p
 
 
 def test_classify_shopping_offers_passes_offer_labels_and_canonical_title_into_the_prompt(
-    image_paths: Path,
+    image_paths: list[Path],
 ) -> None:
     model = _model()
     captured: list[dict[str, Any]] = []
@@ -104,7 +116,15 @@ def test_classify_shopping_offers_passes_offer_labels_and_canonical_title_into_t
     async def fake_classify(messages: list[dict[str, Any]], **kwargs: Any) -> str:
         captured.extend(messages)
         return _fake_response(
-            [{"image_index": i, "classification": "same_product", "confidence": 0.9, "reason": ""} for i in (1, 2, 3)]
+            [
+                {
+                    "image_index": i,
+                    "classification": "same_product",
+                    "confidence": 0.9,
+                    "reason": "",
+                }
+                for i in (1, 2, 3)
+            ]
         )
 
     with patch.object(NemotronVisionModel, "_classify", side_effect=fake_classify):
@@ -133,7 +153,9 @@ def test_classify_shopping_offers_rejects_empty_image_list() -> None:
         _run(model.classify_shopping_offers([], "product", []))
 
 
-def test_classify_shopping_offers_rejects_mismatched_offer_labels_length(image_paths: Path) -> None:
+def test_classify_shopping_offers_rejects_mismatched_offer_labels_length(
+    image_paths: list[Path],
+) -> None:
     model = _model()
     with pytest.raises(ValueError):
         _run(model.classify_shopping_offers(image_paths, "product", ["only one label"]))
@@ -153,14 +175,24 @@ def test_classify_shopping_offers_rejects_more_than_five_images(tmp_path: Path) 
 # --- response parsing robustness ----------------------------------------------
 
 
-def test_classify_shopping_offers_raises_on_missing_index(image_paths: Path) -> None:
+def test_classify_shopping_offers_raises_on_missing_index(image_paths: list[Path]) -> None:
     model = _model()
 
     async def fake_classify(messages: list[dict[str, Any]], **kwargs: Any) -> str:
         return _fake_response(
             [
-                {"image_index": 1, "classification": "same_product", "confidence": 0.9, "reason": ""},
-                {"image_index": 2, "classification": "same_product", "confidence": 0.9, "reason": ""},
+                {
+                    "image_index": 1,
+                    "classification": "same_product",
+                    "confidence": 0.9,
+                    "reason": "",
+                },
+                {
+                    "image_index": 2,
+                    "classification": "same_product",
+                    "confidence": 0.9,
+                    "reason": "",
+                },
                 # index 3 missing entirely
             ]
         )
@@ -170,15 +202,30 @@ def test_classify_shopping_offers_raises_on_missing_index(image_paths: Path) -> 
             _run(model.classify_shopping_offers(image_paths, "product", ["1", "2", "3"]))
 
 
-def test_classify_shopping_offers_raises_on_duplicate_index(image_paths: Path) -> None:
+def test_classify_shopping_offers_raises_on_duplicate_index(image_paths: list[Path]) -> None:
     model = _model()
 
     async def fake_classify(messages: list[dict[str, Any]], **kwargs: Any) -> str:
         return _fake_response(
             [
-                {"image_index": 1, "classification": "same_product", "confidence": 0.9, "reason": ""},
-                {"image_index": 1, "classification": "different_variant", "confidence": 0.9, "reason": ""},
-                {"image_index": 3, "classification": "same_product", "confidence": 0.9, "reason": ""},
+                {
+                    "image_index": 1,
+                    "classification": "same_product",
+                    "confidence": 0.9,
+                    "reason": "",
+                },
+                {
+                    "image_index": 1,
+                    "classification": "different_variant",
+                    "confidence": 0.9,
+                    "reason": "",
+                },
+                {
+                    "image_index": 3,
+                    "classification": "same_product",
+                    "confidence": 0.9,
+                    "reason": "",
+                },
             ]
         )
 
@@ -187,7 +234,9 @@ def test_classify_shopping_offers_raises_on_duplicate_index(image_paths: Path) -
             _run(model.classify_shopping_offers(image_paths, "product", ["1", "2", "3"]))
 
 
-def test_classify_shopping_offers_case_insensitive_classification_value(image_paths: Path) -> None:
+def test_classify_shopping_offers_case_insensitive_classification_value(
+    image_paths: list[Path],
+) -> None:
     """
     Regression test for the exact live bug found: the model returning the
     classification string in a different case than the enum's lowercase
@@ -199,7 +248,12 @@ def test_classify_shopping_offers_case_insensitive_classification_value(image_pa
     async def fake_classify(messages: list[dict[str, Any]], **kwargs: Any) -> str:
         return _fake_response(
             [
-                {"image_index": i, "classification": "DIFFERENT_VARIANT", "confidence": 0.9, "reason": ""}
+                {
+                    "image_index": i,
+                    "classification": "DIFFERENT_VARIANT",
+                    "confidence": 0.9,
+                    "reason": "",
+                }
                 for i in (1, 2, 3)
             ]
         )
@@ -222,7 +276,9 @@ def test_classify_shopping_offers_case_insensitive_classification_value(image_pa
 # still parse successfully rather than losing the whole classification.
 
 
-def test_classify_shopping_offers_parses_related_product_classification(image_paths: Path) -> None:
+def test_classify_shopping_offers_parses_related_product_classification(
+    image_paths: list[Path],
+) -> None:
     """
     Same brand, different product (e.g. "Kellogg's Corn Flakes" for a
     "Kellogg's Muesli" request) or same category, different brand (e.g.
@@ -246,12 +302,16 @@ def test_classify_shopping_offers_parses_related_product_classification(image_pa
         )
 
     with patch.object(NemotronVisionModel, "_classify", side_effect=fake_classify):
-        verdicts = _run(model.classify_shopping_offers(image_paths, "Kellogg's Muesli", ["1", "2", "3"]))
+        verdicts = _run(
+            model.classify_shopping_offers(image_paths, "Kellogg's Muesli", ["1", "2", "3"])
+        )
 
     assert all(v.classification == ShoppingMatchClassification.RELATED_PRODUCT for v in verdicts)
 
 
-def test_classify_shopping_offers_parses_evidence_and_attribute_match_fields(image_paths: Path) -> None:
+def test_classify_shopping_offers_parses_evidence_and_attribute_match_fields(
+    image_paths: list[Path],
+) -> None:
     model = _model()
 
     async def fake_classify(messages: list[dict[str, Any]], **kwargs: Any) -> str:
@@ -277,7 +337,9 @@ def test_classify_shopping_offers_parses_evidence_and_attribute_match_fields(ima
         )
 
     with patch.object(NemotronVisionModel, "_classify", side_effect=fake_classify):
-        verdicts = _run(model.classify_shopping_offers(image_paths, "Kellogg's Muesli", ["1", "2", "3"]))
+        verdicts = _run(
+            model.classify_shopping_offers(image_paths, "Kellogg's Muesli", ["1", "2", "3"])
+        )
 
     verdict = verdicts[0]
     assert verdict.evidence == [
@@ -291,14 +353,21 @@ def test_classify_shopping_offers_parses_evidence_and_attribute_match_fields(ima
     assert verdict.size_match is True
 
 
-def test_classify_shopping_offers_missing_optional_fields_default_gracefully(image_paths: Path) -> None:
+def test_classify_shopping_offers_missing_optional_fields_default_gracefully(
+    image_paths: list[Path],
+) -> None:
     """An old-shape response (no evidence/attribute-match fields at all) must still parse - full backward compat."""
     model = _model()
 
     async def fake_classify(messages: list[dict[str, Any]], **kwargs: Any) -> str:
         return _fake_response(
             [
-                {"image_index": i, "classification": "same_product", "confidence": 0.9, "reason": "ok"}
+                {
+                    "image_index": i,
+                    "classification": "same_product",
+                    "confidence": 0.9,
+                    "reason": "ok",
+                }
                 for i in (1, 2, 3)
             ]
         )
@@ -314,7 +383,9 @@ def test_classify_shopping_offers_missing_optional_fields_default_gracefully(ima
         assert verdict.size_match is None
 
 
-def test_classify_shopping_offers_malformed_optional_fields_degrade_gracefully(image_paths: Path) -> None:
+def test_classify_shopping_offers_malformed_optional_fields_degrade_gracefully(
+    image_paths: list[Path],
+) -> None:
     """
     A malformed optional field (wrong type) must NOT take down an otherwise-
     valid classification - required fields (classification/confidence) still
@@ -334,8 +405,18 @@ def test_classify_shopping_offers_malformed_optional_fields_degrade_gracefully(i
                     "evidence": "not a list",  # malformed - should degrade to []
                     "brand_match": "yes",  # malformed - should degrade to None
                 },
-                {"image_index": 2, "classification": "same_product", "confidence": 0.9, "reason": "ok"},
-                {"image_index": 3, "classification": "same_product", "confidence": 0.9, "reason": "ok"},
+                {
+                    "image_index": 2,
+                    "classification": "same_product",
+                    "confidence": 0.9,
+                    "reason": "ok",
+                },
+                {
+                    "image_index": 3,
+                    "classification": "same_product",
+                    "confidence": 0.9,
+                    "reason": "ok",
+                },
             ]
         )
 
@@ -347,7 +428,9 @@ def test_classify_shopping_offers_malformed_optional_fields_degrade_gracefully(i
     assert verdicts[0].brand_match is None
 
 
-def test_classify_shopping_offers_raises_on_completely_invalid_json(image_paths: Path) -> None:
+def test_classify_shopping_offers_raises_on_completely_invalid_json(
+    image_paths: list[Path],
+) -> None:
     """Malformed Nemotron JSON (not JSON at all) must raise, not silently produce a fabricated verdict."""
     model = _model()
 
@@ -412,7 +495,7 @@ def test_system_prompt_includes_kelloggs_saffola_worked_example() -> None:
 
 
 def test_classify_shopping_offers_accepts_different_variant_for_specialty_sea_salt_scenario(
-    image_paths: Path,
+    image_paths: list[Path],
 ) -> None:
     """
     End-to-end plumbing check for the live failure scenario, under the
@@ -513,7 +596,7 @@ def test_system_prompt_caps_evidence_at_two_items() -> None:
 
 
 def test_classify_shopping_offers_accepts_related_product_for_shared_parent_company_scenario(
-    image_paths: Path,
+    image_paths: list[Path],
 ) -> None:
     """
     End-to-end plumbing check for the exact live failure scenario (generic
@@ -537,7 +620,9 @@ def test_classify_shopping_offers_accepts_related_product_for_shared_parent_comp
                     "classification": "different_variant",
                     "confidence": 0.4,
                     "reason": "same parent company but a different consumer-facing brand",
-                    "evidence": ["Requested brand is Acme Brand; candidate brand is Northfield Foods"],
+                    "evidence": [
+                        "Requested brand is Acme Brand; candidate brand is Northfield Foods"
+                    ],
                     "brand_match": False,
                     "product_match": True,
                     "variant_match": False,
@@ -558,8 +643,6 @@ def test_classify_shopping_offers_accepts_related_product_for_shared_parent_comp
 
     for verdict in verdicts:
         assert verdict.classification == ShoppingMatchClassification.DIFFERENT_VARIANT
-        assert verdict.classification != ShoppingMatchClassification.SAME_PRODUCT
-        assert verdict.classification != ShoppingMatchClassification.SAME_PRODUCT_DIFFERENT_SIZE
         assert verdict.brand_match is False
         assert "Northfield Foods" in verdict.evidence[0]
 
@@ -569,7 +652,11 @@ def _classify_raw(raw_response: str, image_paths: list[Path], count: int) -> lis
         return raw_response
 
     with patch.object(NemotronVisionModel, "_classify", side_effect=fake_classify):
-        return _run(_model().classify_shopping_offers(image_paths[:count], "product", [str(i) for i in range(count)]))
+        return _run(
+            _model().classify_shopping_offers(
+                image_paths[:count], "product", [str(i) for i in range(count)]
+            )
+        )
 
 
 def test_parser_recovers_from_the_first_live_malformed_response(image_paths: list[Path]) -> None:
@@ -640,7 +727,9 @@ def test_recovery_still_rejects_a_response_missing_an_entry(image_paths: list[Pa
 
 
 def test_recovery_still_rejects_an_unknown_classification(image_paths: list[Path]) -> None:
-    malformed = '{"classifications": [{"image_index": 1, "classification": "maybe", "confidence": 0.9,,}]}'
+    malformed = (
+        '{"classifications": [{"image_index": 1, "classification": "maybe", "confidence": 0.9,,}]}'
+    )
 
     with pytest.raises(VisionModelError):
         _classify_raw(malformed, image_paths, 1)
@@ -655,7 +744,10 @@ def test_prompt_shows_the_model_not_relevant_instead_of_different_variant() -> N
     prompt = SHOPPING_OFFER_CLASSIFICATION_SYSTEM_PROMPT
     assert "different_variant" not in prompt
     assert '"not_relevant"' in prompt
-    assert "A different variant, flavour, or line of the same brand and product is NOT this category" in prompt
+    assert (
+        "A different variant, flavour, or line of the same brand and product is NOT this category"
+        in prompt
+    )
 
 
 def test_parser_maps_not_relevant_to_the_existing_category(image_paths: list[Path]) -> None:
@@ -663,7 +755,12 @@ def test_parser_maps_not_relevant_to_the_existing_category(image_paths: list[Pat
         [
             {"image_index": 1, "classification": "not_relevant", "confidence": 0.1, "reason": ""},
             {"image_index": 2, "classification": "NOT_RELEVANT", "confidence": 0.1, "reason": ""},
-            {"image_index": 3, "classification": "different_variant", "confidence": 0.1, "reason": ""},
+            {
+                "image_index": 3,
+                "classification": "different_variant",
+                "confidence": 0.1,
+                "reason": "",
+            },
         ]
     )
 
@@ -703,19 +800,28 @@ def test_system_prompt_states_shared_vocabulary_is_not_relevance() -> None:
     prompt = SHOPPING_OFFER_CLASSIFICATION_SYSTEM_PROMPT
     assert "RELEVANCE IS NOT SHARED VOCABULARY" in prompt
     lowered = prompt.lower()
-    for insufficient in ("generic word", "broad category", "ingredient or material", "adjacent or complementary"):
+    for insufficient in (
+        "generic word",
+        "broad category",
+        "ingredient or material",
+        "adjacent or complementary",
+    ):
         assert insufficient in lowered
 
 
 def test_system_prompt_fails_closed_to_different_variant() -> None:
     prompt = SHOPPING_OFFER_CLASSIFICATION_SYSTEM_PROMPT
     assert "FAIL CLOSED" in prompt
-    assert 'When unsure between "related_product" and "not_relevant", choose "not_relevant"' in prompt
+    assert (
+        'When unsure between "related_product" and "not_relevant", choose "not_relevant"' in prompt
+    )
 
 
 def test_system_prompt_treats_multipack_as_same_product_different_size() -> None:
     prompt = SHOPPING_OFFER_CLASSIFICATION_SYSTEM_PROMPT
-    size_definition = prompt[prompt.index('  - "same_product_different_size":') : prompt.index('  - "related_product":')]
+    size_definition = prompt[
+        prompt.index('  - "same_product_different_size":') : prompt.index('  - "related_product":')
+    ]
     assert "Pack of 2" in size_definition
 
 
@@ -758,7 +864,9 @@ def test_render_user_prompt_labels_query_as_original_user_query() -> None:
     already passes the raw `product_name` here; this checks the prompt
     itself frames it correctly.
     """
-    rendered = render_shopping_offer_classification_user_prompt("Kelloggs Muesli", ["1. A"], canonical_title=None)
+    rendered = render_shopping_offer_classification_user_prompt(
+        "Kelloggs Muesli", ["1. A"], canonical_title=None
+    )
     assert "original user search query" in rendered.lower()
     assert "Kelloggs Muesli" in rendered
 
@@ -776,7 +884,12 @@ def test_system_prompt_json_schema_labels_cover_the_enum_exactly() -> None:
 
     parsed = {NemotronVisionModel._parse_shopping_label(label) for label in labels}
 
-    assert labels == ["same_product", "same_product_different_size", "related_product", "not_relevant"]
+    assert labels == [
+        "same_product",
+        "same_product_different_size",
+        "related_product",
+        "not_relevant",
+    ]
     assert parsed == set(ShoppingMatchClassification)
 
 
@@ -811,7 +924,9 @@ def _same_product_response(count: int) -> str:
     )
 
 
-def _capture_messages(image_paths: list[Path | None], labels: list[str], query: str) -> list[dict[str, Any]]:
+def _capture_messages(
+    image_paths: Sequence[Path | None], labels: list[str], query: str
+) -> list[dict[str, Any]]:
     captured: list[dict[str, Any]] = []
 
     async def fake_classify(messages: list[dict[str, Any]], **kwargs: Any) -> str:
@@ -825,7 +940,9 @@ def _capture_messages(image_paths: list[Path | None], labels: list[str], query: 
     return captured
 
 
-def test_nemotron_receives_original_query_title_and_page_description(image_paths: list[Path]) -> None:
+def test_nemotron_receives_original_query_title_and_page_description(
+    image_paths: list[Path],
+) -> None:
     messages = _capture_messages(image_paths[:1], [_CANDIDATE_LABEL], "TATA SALT 1KG PKT")
 
     user_text = messages[1]["content"][0]["text"]
@@ -874,7 +991,10 @@ def test_system_prompt_treats_page_text_and_urls_as_untrusted_or_non_evidence() 
 
 
 def test_system_prompt_does_not_ask_nemotron_to_judge_retailer_trust() -> None:
-    assert "do not judge whether a retailer is trustworthy" in SHOPPING_OFFER_CLASSIFICATION_SYSTEM_PROMPT
+    assert (
+        "do not judge whether a retailer is trustworthy"
+        in SHOPPING_OFFER_CLASSIFICATION_SYSTEM_PROMPT
+    )
 
 
 # --- underspecified queries and decision order -------------------------------------
@@ -961,7 +1081,9 @@ def test_system_prompt_puts_containers_and_accessories_first_in_the_decision_ord
     prompt = SHOPPING_OFFER_CLASSIFICATION_SYSTEM_PROMPT
     order = prompt[prompt.index("DECISION ORDER") :]
     assert order.index("FIRST.") < order.index("  1. ")
-    assert "its container, empty packaging, a cap, case, cover, holder, or another accessory" in order
+    assert (
+        "its container, empty packaging, a cap, case, cover, holder, or another accessory" in order
+    )
     assert "never promote the closest-looking one" in order
 
 
@@ -972,19 +1094,25 @@ def test_system_prompt_puts_containers_and_accessories_first_in_the_decision_ord
 
 def test_system_prompt_says_every_product_of_a_brand_only_query_is_the_same_product() -> None:
     prompt = SHOPPING_OFFER_CLASSIFICATION_SYSTEM_PROMPT
-    assert "EVERY product sold under that brand is \"same_product\"" in prompt
-    assert "Never reject such a candidate because its product type \"differs\"" in prompt
+    assert 'EVERY product sold under that brand is "same_product"' in prompt
+    assert 'Never reject such a candidate because its product type "differs"' in prompt
 
 
 def test_system_prompt_says_unstated_attributes_cannot_mismatch() -> None:
     prompt = SHOPPING_OFFER_CLASSIFICATION_SYSTEM_PROMPT
-    assert "an attribute the query does not state (product type, variant, size) cannot mismatch" in prompt
+    assert (
+        "an attribute the query does not state (product type, variant, size) cannot mismatch"
+        in prompt
+    )
 
 
 def test_decision_rule_for_a_different_kind_of_product_needs_a_stated_kind() -> None:
     prompt = SHOPPING_OFFER_CLASSIFICATION_SYSTEM_PROMPT
     order = prompt[prompt.index("DECISION ORDER") :]
-    assert "2. The query names a kind of product, and the candidate is the same brand but a different kind" in order
+    assert (
+        "2. The query names a kind of product, and the candidate is the same brand but a different kind"
+        in order
+    )
     assert "(Not for a query that names only a brand" in order
 
 

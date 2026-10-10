@@ -1,13 +1,13 @@
 """
-Google Shopping product search and gallery extraction via SerpApi - no
-Playwright. Second-priority active retailer, after Amazon
+Google Shopping product search and gallery extraction via SerpApi (no
+browser). Second-priority active retailer, after Amazon
 (`amazon_serpapi.py`), before the Google Images fallback (`selection_stage.py`).
 
 Honors the same shared contract every retailer module implements
 (`search/retailers/__init__.py`):
 `search_product_page(page, query) -> list[str]` and
 `extract_gallery(page, product_url) -> GalleryResult`, both `async`. The
-`page: Page` argument is accepted but never used, exactly like
+`page` argument is accepted but never used, exactly like
 `amazon_serpapi.py` - these are plain authenticated HTTP requests, no
 browser needed.
 
@@ -72,7 +72,6 @@ import urllib.parse
 import urllib.request
 from typing import Any, Final
 
-from playwright.async_api import Page
 
 from config import get_settings
 from models import ShoppingOffer
@@ -122,7 +121,9 @@ def _extract_page_token(product_url: str) -> str:
     query = urllib.parse.urlsplit(product_url).query
     values = urllib.parse.parse_qs(query).get(_PAGE_TOKEN_PARAM)
     if not values or not values[0]:
-        raise SerpApiSearchError(f"Could not extract a page_token from product URL: {product_url!r}")
+        raise SerpApiSearchError(
+            f"Could not extract a page_token from product URL: {product_url!r}"
+        )
     return values[0]
 
 
@@ -152,7 +153,7 @@ def _fetch_json(url: str) -> dict[str, Any]:
         raise SerpApiSearchError(f"Network error contacting SerpAPI: {exc}") from exc
 
     try:
-        payload = json.loads(body)
+        payload: dict[str, Any] = json.loads(body)
     except json.JSONDecodeError as exc:
         raise SerpApiSearchError(f"SerpAPI response was not valid JSON: {exc}") from exc
 
@@ -198,7 +199,7 @@ def _extract_error_message(body: bytes) -> str | None:
     return str(error) if error else None
 
 
-async def search_product_page(page: Page, query: str) -> list[str]:
+async def search_product_page(page: object | None, query: str) -> list[str]:
     """
     Search Google Shopping (India) for `query` via SerpApi
     (`engine=google_shopping`) and return up to `_MAX_CANDIDATES` candidate
@@ -244,7 +245,7 @@ async def search_product_page(page: Page, query: str) -> list[str]:
     return deduped
 
 
-async def extract_gallery(page: Page, product_url: str) -> GalleryResult:
+async def extract_gallery(page: object | None, product_url: str) -> GalleryResult:
     """
     Fetch the full image gallery for the Google Shopping product at
     `product_url` via SerpApi's Google Immersive Product API
@@ -390,7 +391,9 @@ async def resolve_direct_merchant_link(page_token: str, source: str | None) -> s
         }
         payload = await _request(params)
     except Exception as exc:  # noqa: BLE001 - best-effort; product_link is the caller's fallback
-        logger.warning("[Google Shopping/SerpApi] direct-link resolution failed for source=%r: %s", source, exc)
+        logger.warning(
+            "[Google Shopping/SerpApi] direct-link resolution failed for source=%r: %s", source, exc
+        )
         return None
 
     stores = (payload.get("product_results") or {}).get("stores") or []
@@ -399,7 +402,12 @@ async def resolve_direct_merchant_link(page_token: str, source: str | None) -> s
             continue
         name = store.get("name")
         link = store.get("link")
-        if isinstance(name, str) and canonical_retailer(name) == retailer and isinstance(link, str) and link:
+        if (
+            isinstance(name, str)
+            and canonical_retailer(name) == retailer
+            and isinstance(link, str)
+            and link
+        ):
             return link
 
     return None

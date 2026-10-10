@@ -37,16 +37,13 @@ _debug_*.json
 # don't belong in version control.
 images/
 
-# --- Playwright ------------------------------------------------------------
-/test-results/
-/playwright-report/
-/playwright/.cache/
-
 # --- Editors / OS -----------------------------------------------------------
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
 
-# --- Claude Code (personal/local dev config, not project config) -------------
-.claude/settings.local.json
+# --- Local assistant / tool configuration (machine-specific) -----------------
+# Shared project instructions live in CLAUDE.md, which is committed.
+.claude/
+CLAUDE.local.md

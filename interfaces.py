@@ -63,7 +63,7 @@ class ImageSearchProvider(ABC):
     A source of candidate image URLs for a given query.
 
     One adapter per source: Google Images, Bing Images, SerpAPI, Brave
-    Search, Amazon, Flipkart, a manufacturer's own site, etc. The pipeline
+    Search, Amazon, a manufacturer's own site, etc. The pipeline
     treats all of them identically and may fan a query out to several
     providers concurrently.
     """
@@ -106,7 +106,9 @@ class StorageProvider(ABC):
     """
 
     @abstractmethod
-    async def persist_image(self, downloaded: DownloadedImage, product_name: str, side: str) -> Path:
+    async def persist_image(
+        self, downloaded: DownloadedImage, product_name: str, side: str
+    ) -> Path:
         """Move/copy a downloaded image into permanent storage; return its final path."""
         ...
 

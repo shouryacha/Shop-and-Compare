@@ -23,7 +23,10 @@ def test_external_dns_lookup_is_blocked(network_guard: list[str]) -> None:
 
 def test_external_connect_is_blocked(network_guard: list[str]) -> None:
     # 203.0.113.0/24 is a documentation-only range (TEST-NET-3), never routable.
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock, pytest.raises(OSError, match="blocked"):
+    with (
+        socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock,
+        pytest.raises(OSError, match="blocked"),
+    ):
         sock.connect(("203.0.113.1", 443))
 
     assert network_guard == ["connect to 203.0.113.1"]

@@ -87,9 +87,7 @@ class _SavedImage:
 class HttpImageDownloader(ImageDownloader):
     """`ImageDownloader` adapter that fetches images over plain HTTP(S)."""
 
-    async def download_images(
-        self, urls: list[str], destination_dir: Path
-    ) -> list[Path]:
+    async def download_images(self, urls: list[str], destination_dir: Path) -> list[Path]:
         """
         Download each URL in `urls`, skipping duplicates and any URL that
         fails (invalid URL, network error, timeout, corrupt image), and
@@ -170,7 +168,7 @@ class HttpImageDownloader(ImageDownloader):
         request = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
         try:
             with urllib.request.urlopen(request, timeout=_DEFAULT_TIMEOUT_SECONDS) as response:
-                data = response.read(_MAX_IMAGE_BYTES + 1)
+                data: bytes = response.read(_MAX_IMAGE_BYTES + 1)
         except urllib.error.HTTPError as exc:
             raise ImageNetworkError(f"HTTP {exc.code} fetching {url!r}: {exc.reason}") from exc
         except urllib.error.URLError as exc:

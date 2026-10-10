@@ -16,12 +16,17 @@ Design intent:
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl
+
+
+def _utc_now() -> datetime:
+    """Naive UTC "now" (same value and serialized form as the deprecated `datetime.utcnow()`)."""
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 class ImageSide(str, Enum):
@@ -82,7 +87,7 @@ class DownloadedImage(BaseModel):
     content_type: str | None = None
     file_size_bytes: int | None = None
     checksum_sha256: str | None = None
-    downloaded_at: datetime = Field(default_factory=datetime.utcnow)
+    downloaded_at: datetime = Field(default_factory=_utc_now)
 
 
 class ClassificationVerdict(BaseModel):
@@ -98,7 +103,9 @@ class ClassificationVerdict(BaseModel):
         ..., description="Whether the image depicts the exact product queried for."
     )
     side: ImageSide
-    confidence: float = Field(..., ge=0.0, le=1.0, description="Model's confidence in this verdict.")
+    confidence: float = Field(
+        ..., ge=0.0, le=1.0, description="Model's confidence in this verdict."
+    )
     reasoning: str = Field(default="", description="Short natural-language justification.")
     raw_model_response: dict[str, Any] | str | None = Field(
         default=None, description="Unparsed response, kept for auditability/debugging."
@@ -129,9 +136,13 @@ class ProductMatchVerdict(BaseModel):
     is_match: bool = Field(
         ..., description="Whether this is clearly the same commercial product as requested."
     )
-    confidence: float = Field(..., ge=0.0, le=1.0, description="Model's confidence in this verdict.")
+    confidence: float = Field(
+        ..., ge=0.0, le=1.0, description="Model's confidence in this verdict."
+    )
     reason: str = Field(default="", description="Short natural-language justification.")
-    brand: str | None = Field(default=None, description="Brand as read off the packaging, if legible.")
+    brand: str | None = Field(
+        default=None, description="Brand as read off the packaging, if legible."
+    )
     product_name: str | None = Field(
         default=None, description="Product name/variant as read off the packaging, if legible."
     )
@@ -167,7 +178,7 @@ class ProductImageResult(BaseModel):
         default_factory=dict,
         description="Free-form extra context: timings, candidate counts, warnings, etc.",
     )
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=_utc_now)
 
 
 # ---------------------------------------------------------------------------
@@ -228,7 +239,9 @@ class ShoppingOffer(BaseModel):
 
     position: int | None = None
     title: str
-    source: str | None = Field(default=None, description="Merchant/seller name, e.g. 'Amazon', 'Zepto'.")
+    source: str | None = Field(
+        default=None, description="Merchant/seller name, e.g. 'Amazon', 'Zepto'."
+    )
     price: str | None = Field(default=None, description="Seller's own price string, e.g. '₹28'.")
     extracted_price: float | None = None
     thumbnail_url: HttpUrl
@@ -263,21 +276,27 @@ class ShoppingMatchVerdict(BaseModel):
     """
 
     classification: ShoppingMatchClassification
-    confidence: float = Field(..., ge=0.0, le=1.0, description="Model's confidence in this verdict.")
+    confidence: float = Field(
+        ..., ge=0.0, le=1.0, description="Model's confidence in this verdict."
+    )
     reason: str = Field(default="", description="Short natural-language justification.")
     evidence: list[str] = Field(
         default_factory=list,
         description="Short, concrete, attribute-referencing statements supporting the classification "
-        "(e.g. \"Brand matches Kellogg's\", \"500g pack matches requested size\").",
+        '(e.g. "Brand matches Kellogg\'s", "500g pack matches requested size").',
     )
-    brand_match: bool | None = Field(default=None, description="Whether the candidate's brand matches.")
+    brand_match: bool | None = Field(
+        default=None, description="Whether the candidate's brand matches."
+    )
     product_match: bool | None = Field(
         default=None, description="Whether the candidate's product type/category matches."
     )
     variant_match: bool | None = Field(
         default=None, description="Whether the candidate's variant/flavor matches."
     )
-    size_match: bool | None = Field(default=None, description="Whether the candidate's pack size matches.")
+    size_match: bool | None = Field(
+        default=None, description="Whether the candidate's pack size matches."
+    )
     model_name: str = Field(..., description="Registry key of the VisionModel that produced this.")
 
 
@@ -320,4 +339,4 @@ class ShoppingComparisonResult(BaseModel):
         default=False,
         description="True if the Google Shopping search call failed (not a genuine zero-result search).",
     )
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=_utc_now)

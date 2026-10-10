@@ -94,9 +94,14 @@ def _offline_defaults() -> Iterator[None]:
 
     with (
         patch("search.retailers.google_shopping_serpapi._fetch_json", side_effect=_refuse),
-        patch("shopping_comparison_stage.google_shopping_serpapi.resolve_direct_merchant_link", return_value=None),
+        patch(
+            "shopping_comparison_stage.google_shopping_serpapi.resolve_direct_merchant_link",
+            return_value=None,
+        ),
         patch("shopping_comparison_stage.fetch_product_page_text", return_value=None),
-        patch("shopping_comparison_stage._BATCH_RETRY_DELAY_SECONDS", 0.0),  # no real pause between attempts
+        patch(
+            "shopping_comparison_stage._BATCH_RETRY_DELAY_SECONDS", 0.0
+        ),  # no real pause between attempts
     ):
         yield
 
@@ -114,7 +119,9 @@ class _FakeDownloader(ImageDownloader):
 
 
 class _FakeStorage(StorageProvider):
-    async def persist_image(self, downloaded: DownloadedImage, product_name: str, side: str) -> Path:
+    async def persist_image(
+        self, downloaded: DownloadedImage, product_name: str, side: str
+    ) -> Path:
         return Path(f"/fake/{product_name}/{side}.jpg")
 
     async def persist_result(self, result: ProductImageResult) -> None:
@@ -143,7 +150,8 @@ class _FakeVisionModel:
         self.image_path_calls.append(image_paths)
         self.product_names.append(product_name)
         if self._classify_fn is not None:
-            return self._classify_fn(image_paths, offer_labels)
+            verdicts: list[ShoppingMatchVerdict] = self._classify_fn(image_paths, offer_labels)
+            return verdicts
         return [
             ShoppingMatchVerdict(
                 classification=ShoppingMatchClassification.SAME_PRODUCT,
@@ -178,10 +186,14 @@ def _offer(
 
 
 def _verdict(classification: ShoppingMatchClassification) -> ShoppingMatchVerdict:
-    return ShoppingMatchVerdict(classification=classification, confidence=0.9, reason="fake", model_name="fake")
+    return ShoppingMatchVerdict(
+        classification=classification, confidence=0.9, reason="fake", model_name="fake"
+    )
 
 
-def _stage(vision_model: _FakeVisionModel, downloader: ImageDownloader | None = None) -> ShoppingComparisonStage:
+def _stage(
+    vision_model: _FakeVisionModel, downloader: ImageDownloader | None = None
+) -> ShoppingComparisonStage:
     return ShoppingComparisonStage(
         downloader=downloader or _FakeDownloader(),
         vision_model=vision_model,  # type: ignore[arg-type]
@@ -239,7 +251,9 @@ def test_compare_never_calls_amazon_serpapi() -> None:
 
     with patch(
         "search.retailers.amazon_serpapi.search_product_page",
-        side_effect=AssertionError("amazon_serpapi.search_product_page must not be called by Shop & Compare"),
+        side_effect=AssertionError(
+            "amazon_serpapi.search_product_page must not be called by Shop & Compare"
+        ),
     ):
         with patch(
             "shopping_comparison_stage.google_shopping_serpapi.search_shopping_offers",
@@ -259,13 +273,16 @@ def test_compare_classifies_offers_directly_from_google_shopping() -> None:
     offers = [_offer(1), _offer(2)]
 
     with patch(
-        "shopping_comparison_stage.google_shopping_serpapi.search_shopping_offers", return_value=offers
+        "shopping_comparison_stage.google_shopping_serpapi.search_shopping_offers",
+        return_value=offers,
     ):
         result = _run(stage.compare("Some Product 1kg"))
 
     assert len(result.offers) == 2
     assert result.unclassified_offers == []
-    assert all(o.verdict.classification == ShoppingMatchClassification.SAME_PRODUCT for o in result.offers)
+    assert all(
+        o.verdict.classification == ShoppingMatchClassification.SAME_PRODUCT for o in result.offers
+    )
     assert result.search_failed is False
 
 
@@ -274,7 +291,9 @@ def test_compare_returns_genuine_empty_state_when_google_shopping_returns_nothin
     vision_model = _FakeVisionModel()
     stage = _stage(vision_model)
 
-    with patch("shopping_comparison_stage.google_shopping_serpapi.search_shopping_offers", return_value=[]):
+    with patch(
+        "shopping_comparison_stage.google_shopping_serpapi.search_shopping_offers", return_value=[]
+    ):
         result = _run(stage.compare("Some Product"))
 
     assert result.offers == []
@@ -299,7 +318,8 @@ def test_compare_sets_search_failed_when_google_shopping_search_raises() -> None
     stage = _stage(vision_model)
 
     with patch(
-        "shopping_comparison_stage.google_shopping_serpapi.search_shopping_offers", side_effect=raising_search
+        "shopping_comparison_stage.google_shopping_serpapi.search_shopping_offers",
+        side_effect=raising_search,
     ):
         result = _run(stage.compare("Some Product"))
 
@@ -322,11 +342,14 @@ def test_search_failure_state_is_distinguishable_from_genuine_empty_state() -> N
     vision_model = _FakeVisionModel()
     stage = _stage(vision_model)
 
-    with patch("shopping_comparison_stage.google_shopping_serpapi.search_shopping_offers", return_value=[]):
+    with patch(
+        "shopping_comparison_stage.google_shopping_serpapi.search_shopping_offers", return_value=[]
+    ):
         genuine_empty = _run(stage.compare("Some Product"))
 
     with patch(
-        "shopping_comparison_stage.google_shopping_serpapi.search_shopping_offers", side_effect=raising_search
+        "shopping_comparison_stage.google_shopping_serpapi.search_shopping_offers",
+        side_effect=raising_search,
     ):
         failed_search = _run(stage.compare("Some Product"))
 
@@ -348,7 +371,8 @@ def test_failed_classification_batch_preserves_offers_as_unclassified() -> None:
     offers = [_offer(1), _offer(2)]
 
     with patch(
-        "shopping_comparison_stage.google_shopping_serpapi.search_shopping_offers", return_value=offers
+        "shopping_comparison_stage.google_shopping_serpapi.search_shopping_offers",
+        return_value=offers,
     ):
         result = _run(stage.compare("Some Product"))
 
@@ -361,7 +385,9 @@ def test_failed_classification_batch_preserves_offers_as_unclassified() -> None:
 def test_partial_batch_failure_keeps_successful_batch_classified() -> None:
     """7 offers -> batches of 5 + 2. The first batch fails every attempt, the second succeeds."""
 
-    def classify_fn(image_paths: list[Path | None], offer_labels: list[str]) -> list[ShoppingMatchVerdict]:
+    def classify_fn(
+        image_paths: list[Path | None], offer_labels: list[str]
+    ) -> list[ShoppingMatchVerdict]:
         if len(offer_labels) == 5:
             raise RuntimeError("simulated failure on the first batch")
         return [
@@ -379,20 +405,26 @@ def test_partial_batch_failure_keeps_successful_batch_classified() -> None:
     offers = [_offer(i, url=f"https://example.com/{i}.jpg") for i in range(7)]
 
     with patch(
-        "shopping_comparison_stage.google_shopping_serpapi.search_shopping_offers", return_value=offers
+        "shopping_comparison_stage.google_shopping_serpapi.search_shopping_offers",
+        return_value=offers,
     ):
         result = _run(stage.compare("Some Product"))
 
     assert len(result.unclassified_offers) == 5  # first (failed) batch
     assert len(result.offers) == 2  # second (successful) batch
-    assert all(o.verdict.classification == ShoppingMatchClassification.DIFFERENT_VARIANT for o in result.offers)
+    assert all(
+        o.verdict.classification == ShoppingMatchClassification.DIFFERENT_VARIANT
+        for o in result.offers
+    )
 
 
 def test_failed_batch_is_retried_and_recovers() -> None:
     """NVIDIA's intermittent 503s must not cost half the comparison: one more attempt is made."""
     attempts = {"n": 0}
 
-    def classify_fn(image_paths: list[Path | None], offer_labels: list[str]) -> list[ShoppingMatchVerdict]:
+    def classify_fn(
+        image_paths: list[Path | None], offer_labels: list[str]
+    ) -> list[ShoppingMatchVerdict]:
         attempts["n"] += 1
         if attempts["n"] == 1:
             raise RuntimeError("simulated HTTP 503: request limit reached")
@@ -402,7 +434,10 @@ def test_failed_batch_is_retried_and_recovers() -> None:
     stage = _stage(vision_model)
     offers = [_offer(i, url=f"https://example.com/{i}.jpg") for i in range(3)]
 
-    with patch("shopping_comparison_stage.google_shopping_serpapi.search_shopping_offers", return_value=offers):
+    with patch(
+        "shopping_comparison_stage.google_shopping_serpapi.search_shopping_offers",
+        return_value=offers,
+    ):
         result = _run(stage.compare("Some Product"))
 
     assert attempts["n"] == 2
@@ -413,14 +448,19 @@ def test_failed_batch_is_retried_and_recovers() -> None:
 def test_batch_gives_up_after_three_attempts() -> None:
     attempts = {"n": 0}
 
-    def classify_fn(image_paths: list[Path | None], offer_labels: list[str]) -> list[ShoppingMatchVerdict]:
+    def classify_fn(
+        image_paths: list[Path | None], offer_labels: list[str]
+    ) -> list[ShoppingMatchVerdict]:
         attempts["n"] += 1
         raise RuntimeError("simulated persistent failure")
 
     vision_model = _FakeVisionModel(classify_fn=classify_fn)
     stage = _stage(vision_model)
 
-    with patch("shopping_comparison_stage.google_shopping_serpapi.search_shopping_offers", return_value=[_offer(1)]):
+    with patch(
+        "shopping_comparison_stage.google_shopping_serpapi.search_shopping_offers",
+        return_value=[_offer(1)],
+    ):
         result = _run(stage.compare("Some Product"))
 
     assert attempts["n"] == 3
@@ -433,7 +473,10 @@ def test_classified_offers_keep_candidate_order_across_concurrent_batches() -> N
     stage = _stage(vision_model)
     offers = [_offer(i, url=f"https://example.com/{i}.jpg") for i in range(10)]
 
-    with patch("shopping_comparison_stage.google_shopping_serpapi.search_shopping_offers", return_value=offers):
+    with patch(
+        "shopping_comparison_stage.google_shopping_serpapi.search_shopping_offers",
+        return_value=offers,
+    ):
         result = _run(stage.compare("Some Product"))
 
     assert [c.offer.title for c in result.offers] == [f"Offer {i}" for i in range(10)]
@@ -471,7 +514,8 @@ def test_compare_batches_more_than_five_offers_into_multiple_classify_calls() ->
     stage = _stage(vision_model)
 
     with patch(
-        "shopping_comparison_stage.google_shopping_serpapi.search_shopping_offers", return_value=offers
+        "shopping_comparison_stage.google_shopping_serpapi.search_shopping_offers",
+        return_value=offers,
     ):
         result = _run(stage.compare("Some Product"))
 
@@ -504,7 +548,8 @@ def test_compare_processes_ten_candidates_in_two_batches() -> None:
     stage = _stage(vision_model)
 
     with patch(
-        "shopping_comparison_stage.google_shopping_serpapi.search_shopping_offers", return_value=offers
+        "shopping_comparison_stage.google_shopping_serpapi.search_shopping_offers",
+        return_value=offers,
     ):
         result = _run(stage.compare("Some Product"))
 
@@ -567,12 +612,17 @@ def test_unknown_sellers_are_never_used_as_fallback() -> None:
     """Only 3 approved offers among 20 results: exactly those 3 reach Nemotron, nothing else fills in."""
     vision_model = _FakeVisionModel()
     stage = _stage(vision_model)
-    offers = [_offer(i, url=f"https://example.com/{i}.jpg", source=f"Local Store {i}") for i in range(20)]
+    offers = [
+        _offer(i, url=f"https://example.com/{i}.jpg", source=f"Local Store {i}") for i in range(20)
+    ]
     offers[7].source = "Amazon.in"
     offers[12].source = "Croma"
     offers[18].source = "Blinkit"
 
-    with patch("shopping_comparison_stage.google_shopping_serpapi.search_shopping_offers", return_value=offers):
+    with patch(
+        "shopping_comparison_stage.google_shopping_serpapi.search_shopping_offers",
+        return_value=offers,
+    ):
         result = _run(stage.compare("Some Product"))
 
     assert _titles([c.offer for c in result.offers]) == ["Offer 7", "Offer 12", "Offer 18"]
@@ -590,7 +640,10 @@ def test_only_the_first_ten_approved_candidates_are_processed() -> None:
     stage = _stage(vision_model)
     offers = [_offer(i, url=f"https://example.com/{i}.jpg") for i in range(40)]
 
-    with patch("shopping_comparison_stage.google_shopping_serpapi.search_shopping_offers", return_value=offers):
+    with patch(
+        "shopping_comparison_stage.google_shopping_serpapi.search_shopping_offers",
+        return_value=offers,
+    ):
         result = _run(stage.compare("Some Product"))
 
     assert sum(len(batch) for batch in vision_model.classify_calls) == 10
@@ -602,14 +655,20 @@ def test_unknown_seller_flood_is_discarded_entirely() -> None:
     """The live iPhone case: one unknown seller filling most of Google's top results."""
     vision_model = _FakeVisionModel()
     stage = _stage(vision_model)
-    flood = [_offer(i, url=f"https://example.com/{i}.jpg", source="icluster technologies") for i in range(8)]
+    flood = [
+        _offer(i, url=f"https://example.com/{i}.jpg", source="icluster technologies")
+        for i in range(8)
+    ]
     majors = [
         _offer(20 + i, url=f"https://example.com/{20 + i}.jpg", source=name)
-        for i, name in enumerate(["Apple", "Croma", "Reliance Digital", "Vijay Sales", "Flipkart", "Amazon.in"])
+        for i, name in enumerate(
+            ["Apple", "Croma", "Reliance Digital", "Vijay Sales", "Flipkart", "Amazon.in"]
+        )
     ]
 
     with patch(
-        "shopping_comparison_stage.google_shopping_serpapi.search_shopping_offers", return_value=flood + majors
+        "shopping_comparison_stage.google_shopping_serpapi.search_shopping_offers",
+        return_value=flood + majors,
     ):
         result = _run(stage.compare("iphone 17"))
 
@@ -627,7 +686,10 @@ def test_no_approved_retailers_gives_an_empty_result_without_any_model_or_link_c
     stage = _stage(vision_model)
     offers = [_offer(i, source=f"Local Store {i}") for i in range(10)]
 
-    with patch("shopping_comparison_stage.google_shopping_serpapi.search_shopping_offers", return_value=offers):
+    with patch(
+        "shopping_comparison_stage.google_shopping_serpapi.search_shopping_offers",
+        return_value=offers,
+    ):
         with patch(
             "shopping_comparison_stage.google_shopping_serpapi.resolve_direct_merchant_link"
         ) as mock_resolve:
@@ -681,7 +743,11 @@ def test_ranking_orders_by_classification_before_price() -> None:
         _ranked("exact, most expensive", _SP, price=500),
     ]
 
-    assert _ranked_titles(offers) == ["exact, most expensive", "different size", "related, cheapest"]
+    assert _ranked_titles(offers) == [
+        "exact, most expensive",
+        "different size",
+        "related, cheapest",
+    ]
 
 
 def test_ranking_sorts_price_ascending_within_a_classification() -> None:
@@ -789,14 +855,18 @@ def test_ranking_does_not_modify_its_input() -> None:
 # step drops a candidate.
 
 _GOOGLE_LINK = "https://www.google.com/shopping/somelisting"
-_PAGE_TEXT = "Product name: Tata Salt | Product description: Vacuum evaporated iodised salt, 1 kg pack"
+_PAGE_TEXT = (
+    "Product name: Tata Salt | Product description: Vacuum evaporated iodised salt, 1 kg pack"
+)
 _SEARCH = "shopping_comparison_stage.google_shopping_serpapi.search_shopping_offers"
 _RESOLVE = "shopping_comparison_stage.google_shopping_serpapi.resolve_direct_merchant_link"
 _FETCH_PAGE_TEXT = "shopping_comparison_stage.fetch_product_page_text"
 
 
 def _fixed_classification_fn(classification: ShoppingMatchClassification) -> Any:
-    def _classify(image_paths: list[Path | None], offer_labels: list[str]) -> list[ShoppingMatchVerdict]:
+    def _classify(
+        image_paths: list[Path | None], offer_labels: list[str]
+    ) -> list[ShoppingMatchVerdict]:
         return [_verdict(classification) for _ in image_paths]
 
     return _classify
@@ -816,7 +886,10 @@ def test_approved_candidate_gets_retailer_url_before_nemotron() -> None:
     stage = _stage(vision_model)
     offer = _offer(1, page_token="tok-1", source="Zepto", title="Tata Salt 1 kg")
 
-    with patch(_SEARCH, return_value=[offer]), patch(_RESOLVE, side_effect=_retailer_url) as mock_resolve:
+    with (
+        patch(_SEARCH, return_value=[offer]),
+        patch(_RESOLVE, side_effect=_retailer_url) as mock_resolve,
+    ):
         result = _run(stage.compare("Tata Salt 1 kg"))
 
     mock_resolve.assert_called_once_with("tok-1", "Zepto")
@@ -826,12 +899,19 @@ def test_approved_candidate_gets_retailer_url_before_nemotron() -> None:
 
 
 @pytest.mark.parametrize("classification", list(ShoppingMatchClassification))
-def test_resolved_url_is_kept_whatever_the_classification(classification: ShoppingMatchClassification) -> None:
+def test_resolved_url_is_kept_whatever_the_classification(
+    classification: ShoppingMatchClassification,
+) -> None:
     vision_model = _FakeVisionModel(classify_fn=_fixed_classification_fn(classification))
     stage = _stage(vision_model)
 
-    with patch(_SEARCH, return_value=[_offer(1, page_token="tok-1")]), patch(_RESOLVE, side_effect=_retailer_url):
-        result = _run(stage.compare("Some Product 1 kg"))  # a size is stated, so "different size" stays as is
+    with (
+        patch(_SEARCH, return_value=[_offer(1, page_token="tok-1")]),
+        patch(_RESOLVE, side_effect=_retailer_url),
+    ):
+        result = _run(
+            stage.compare("Some Product 1 kg")
+        )  # a size is stated, so "different size" stays as is
 
     assert result.offers[0].verdict.classification == classification
     assert str(result.offers[0].offer.product_link) == "https://retailer.example/tok-1"
@@ -846,7 +926,10 @@ def test_unknown_seller_never_gets_immersive_resolution() -> None:
         _offer(3, page_token="tok-shopsy", source="Shopsy By Flipkart"),
     ]
 
-    with patch(_SEARCH, return_value=offers), patch(_RESOLVE, side_effect=_retailer_url) as mock_resolve:
+    with (
+        patch(_SEARCH, return_value=offers),
+        patch(_RESOLVE, side_effect=_retailer_url) as mock_resolve,
+    ):
         _run(stage.compare("Some Product"))
 
     mock_resolve.assert_called_once_with("tok-approved", "Croma")
@@ -881,7 +964,10 @@ def test_page_extraction_failure_falls_back_and_still_classifies() -> None:
     vision_model = _FakeVisionModel()
     stage = _stage(vision_model)
 
-    with patch(_SEARCH, return_value=[_offer(1, page_token="tok-1")]), patch(_RESOLVE, side_effect=_retailer_url):
+    with (
+        patch(_SEARCH, return_value=[_offer(1, page_token="tok-1")]),
+        patch(_RESOLVE, side_effect=_retailer_url),
+    ):
         with patch(_FETCH_PAGE_TEXT, return_value=None):
             result = _run(stage.compare("Some Product"))
 
@@ -936,12 +1022,19 @@ def test_resolved_url_is_reused_after_classification_without_a_second_call() -> 
     stage = _stage(vision_model)
     offers = [_offer(i, page_token=f"tok-{i}", source="Zepto") for i in range(3)]
 
-    with patch(_SEARCH, return_value=offers), patch(_RESOLVE, side_effect=_retailer_url) as mock_resolve:
+    with (
+        patch(_SEARCH, return_value=offers),
+        patch(_RESOLVE, side_effect=_retailer_url) as mock_resolve,
+    ):
         result = _run(stage.compare("Some Product"))
 
-    assert mock_resolve.call_count == 3  # once per candidate, before classification - never again after
+    assert (
+        mock_resolve.call_count == 3
+    )  # once per candidate, before classification - never again after
     visible = rank_comparison_offers(result.offers)
-    assert sorted(str(c.offer.product_link) for c in visible) == [f"https://retailer.example/tok-{i}" for i in range(3)]
+    assert sorted(str(c.offer.product_link) for c in visible) == [
+        f"https://retailer.example/tok-{i}" for i in range(3)
+    ]
 
 
 def test_candidates_sharing_a_token_and_seller_share_one_immersive_call() -> None:
@@ -953,10 +1046,16 @@ def test_candidates_sharing_a_token_and_seller_share_one_immersive_call() -> Non
         _offer(3, page_token="tok-other", source="Zepto", title="Tata Salt 2 kg"),
     ]
 
-    with patch(_SEARCH, return_value=offers), patch(_RESOLVE, side_effect=_retailer_url) as mock_resolve:
+    with (
+        patch(_SEARCH, return_value=offers),
+        patch(_RESOLVE, side_effect=_retailer_url) as mock_resolve,
+    ):
         result = _run(stage.compare("Tata Salt 1 kg"))
 
-    assert sorted(call.args[0] for call in mock_resolve.call_args_list) == ["tok-other", "tok-shared"]
+    assert sorted(call.args[0] for call in mock_resolve.call_args_list) == [
+        "tok-other",
+        "tok-shared",
+    ]
     links = [str(c.offer.product_link) for c in result.offers]
     assert links.count("https://retailer.example/tok-shared") == 2
 
@@ -964,7 +1063,9 @@ def test_candidates_sharing_a_token_and_seller_share_one_immersive_call() -> Non
 def test_image_remains_optional_with_retailer_page_text() -> None:
     vision_model = _FakeVisionModel()
     offer = _offer(1, page_token="tok-1", url="https://example.com/bad.jpg")
-    stage = _stage(vision_model, downloader=_FakeDownloader(fail_urls={"https://example.com/bad.jpg"}))
+    stage = _stage(
+        vision_model, downloader=_FakeDownloader(fail_urls={"https://example.com/bad.jpg"})
+    )
 
     with patch(_SEARCH, return_value=[offer]), patch(_RESOLVE, side_effect=_retailer_url):
         with patch(_FETCH_PAGE_TEXT, return_value=_PAGE_TEXT):
@@ -978,7 +1079,9 @@ def test_image_remains_optional_with_retailer_page_text() -> None:
 def test_candidate_with_no_url_page_text_or_image_is_still_classified() -> None:
     vision_model = _FakeVisionModel()
     offer = _offer(1, page_token=None, url="https://example.com/bad.jpg")
-    stage = _stage(vision_model, downloader=_FakeDownloader(fail_urls={"https://example.com/bad.jpg"}))
+    stage = _stage(
+        vision_model, downloader=_FakeDownloader(fail_urls={"https://example.com/bad.jpg"})
+    )
 
     with patch(_SEARCH, return_value=[offer]):
         result = _run(stage.compare("Some Product"))
@@ -994,25 +1097,37 @@ def test_one_shopping_search_and_one_immersive_call_per_approved_candidate() -> 
     offers = [_offer(i, page_token=f"tok-{i}", source="Zepto") for i in range(3)] + [
         _offer(9, page_token="tok-unknown", source="Local Store")
     ]
-    stores_payload = {"product_results": {"stores": [{"name": "Zepto", "link": "https://www.zepto.example/pn/item"}]}}
+    stores_payload = {
+        "product_results": {
+            "stores": [{"name": "Zepto", "link": "https://www.zepto.example/pn/item"}]
+        }
+    }
 
     with patch(_SEARCH, return_value=offers) as mock_search, patch(_RESOLVE, new=_REAL_RESOLVE):
-        with patch("search.retailers.google_shopping_serpapi._fetch_json", return_value=stores_payload) as mock_http:
+        with patch(
+            "search.retailers.google_shopping_serpapi._fetch_json", return_value=stores_payload
+        ) as mock_http:
             with patch.dict("os.environ", {"PIR_SERPAPI_API_KEY": "test-key"}):
                 result = _run(stage.compare("Some Product"))
 
     mock_search.assert_called_once()  # no second Google Shopping search
     requested = [call.args[0] for call in mock_http.call_args_list]
-    assert len(requested) == 3  # one per approved candidate, none for the unknown seller, none repeated
+    assert (
+        len(requested) == 3
+    )  # one per approved candidate, none for the unknown seller, none repeated
     assert all("engine=google_immersive_product" in url for url in requested)
     assert not any("tok-unknown" in url for url in requested)
-    assert all(str(c.offer.product_link) == "https://www.zepto.example/pn/item" for c in result.offers)
+    assert all(
+        str(c.offer.product_link) == "https://www.zepto.example/pn/item" for c in result.offers
+    )
 
 
 # --- ranking and stored results with the new order -----------------------------
 
 
-def _classify_by_title(image_paths: list[Path | None], offer_labels: list[str]) -> list[ShoppingMatchVerdict]:
+def _classify_by_title(
+    image_paths: list[Path | None], offer_labels: list[str]
+) -> list[ShoppingMatchVerdict]:
     if any("jar" in label for label in offer_labels):
         raise RuntimeError("simulated NVIDIA Build failure for this batch")
 
@@ -1044,7 +1159,10 @@ def test_visible_order_is_unchanged_and_every_stored_offer_keeps_its_resolved_ur
     vision_model = _FakeVisionModel(classify_fn=_classify_by_title)
     stage = _stage(vision_model)
 
-    with patch(_SEARCH, return_value=_mixed_offers()), patch(_RESOLVE, side_effect=_retailer_url) as mock_resolve:
+    with (
+        patch(_SEARCH, return_value=_mixed_offers()),
+        patch(_RESOLVE, side_effect=_retailer_url) as mock_resolve,
+    ):
         result = _run(stage.compare("Tata Salt 1 kg"))
 
     assert mock_resolve.call_count == 6  # every approved candidate, once
@@ -1062,17 +1180,24 @@ def test_visible_order_is_unchanged_and_every_stored_offer_keeps_its_resolved_ur
     # Everything is still stored for debugging, each with its own resolved URL.
     assert len(result.offers) == 5
     assert [o.title for o in result.unclassified_offers] == ["Tata Salt 1 kg jar"]
-    assert _links(result) == {token: f"https://retailer.example/{token}" for token in _links(result)}
+    assert _links(result) == {
+        token: f"https://retailer.example/{token}" for token in _links(result)
+    }
 
 
 def test_classification_failure_after_resolution_keeps_the_offer_as_unverified() -> None:
-    def failing_classify(image_paths: list[Path | None], offer_labels: list[str]) -> list[ShoppingMatchVerdict]:
+    def failing_classify(
+        image_paths: list[Path | None], offer_labels: list[str]
+    ) -> list[ShoppingMatchVerdict]:
         raise RuntimeError("simulated NVIDIA Build failure")
 
     vision_model = _FakeVisionModel(classify_fn=failing_classify)
     stage = _stage(vision_model)
 
-    with patch(_SEARCH, return_value=[_offer(1, page_token="tok-1")]), patch(_RESOLVE, side_effect=_retailer_url):
+    with (
+        patch(_SEARCH, return_value=[_offer(1, page_token="tok-1")]),
+        patch(_RESOLVE, side_effect=_retailer_url),
+    ):
         result = _run(stage.compare("Some Product"))
 
     assert result.offers == []
@@ -1087,7 +1212,9 @@ def test_classification_failure_after_resolution_keeps_the_offer_as_unverified()
 
 
 def _approved_offers(count: int) -> list[ShoppingOffer]:
-    return [_offer(i, page_token=f"tok-{i}", url=f"https://example.com/{i}.jpg") for i in range(count)]
+    return [
+        _offer(i, page_token=f"tok-{i}", url=f"https://example.com/{i}.jpg") for i in range(count)
+    ]
 
 
 def test_default_cap_is_ten() -> None:
@@ -1098,7 +1225,10 @@ def test_at_most_ten_approved_candidates_are_resolved_in_google_order() -> None:
     vision_model = _FakeVisionModel()
     stage = _stage(vision_model)
 
-    with patch(_SEARCH, return_value=_approved_offers(15)), patch(_RESOLVE, side_effect=_retailer_url) as mock_resolve:
+    with (
+        patch(_SEARCH, return_value=_approved_offers(15)),
+        patch(_RESOLVE, side_effect=_retailer_url) as mock_resolve,
+    ):
         result = _run(stage.compare("Some Product"))
 
     assert [call.args[0] for call in mock_resolve.call_args_list] == [f"tok-{i}" for i in range(10)]
@@ -1109,9 +1239,14 @@ def test_candidates_beyond_the_cap_are_not_resolved_fetched_or_classified() -> N
     vision_model = _FakeVisionModel()
     stage = _stage(vision_model)
 
-    with patch(_SEARCH, return_value=_approved_offers(15)), patch(_RESOLVE, side_effect=_retailer_url):
+    with (
+        patch(_SEARCH, return_value=_approved_offers(15)),
+        patch(_RESOLVE, side_effect=_retailer_url),
+    ):
         with patch(_FETCH_PAGE_TEXT, new=product_page_text.fetch_product_page_text):
-            with patch("product_page_text._fetch_html", return_value="<title>Product page</title>") as mock_html:
+            with patch(
+                "product_page_text._fetch_html", return_value="<title>Product page</title>"
+            ) as mock_html:
                 result = _run(stage.compare("Some Product"))
 
     fetched = sorted(call.args[0] for call in mock_html.call_args_list)
@@ -1119,7 +1254,9 @@ def test_candidates_beyond_the_cap_are_not_resolved_fetched_or_classified() -> N
     labels = [label for batch in vision_model.classify_calls for label in batch]
     assert len(labels) == 10
     assert not any("Title: Offer 12" in label for label in labels)
-    stored_titles = {c.offer.title for c in result.offers} | {o.title for o in result.unclassified_offers}
+    stored_titles = {c.offer.title for c in result.offers} | {
+        o.title for o in result.unclassified_offers
+    }
     assert stored_titles == {f"Offer {i}" for i in range(10)}
 
 
@@ -1131,7 +1268,10 @@ def test_unknown_sellers_do_not_use_up_the_cap() -> None:
         offers.append(_offer(100 + i, page_token=f"tok-unknown-{i}", source=f"Local Store {i}"))
         offers.append(_offer(i, page_token=f"tok-{i}"))
 
-    with patch(_SEARCH, return_value=offers), patch(_RESOLVE, side_effect=_retailer_url) as mock_resolve:
+    with (
+        patch(_SEARCH, return_value=offers),
+        patch(_RESOLVE, side_effect=_retailer_url) as mock_resolve,
+    ):
         result = _run(stage.compare("Some Product"))
 
     assert [call.args[0] for call in mock_resolve.call_args_list] == [f"tok-{i}" for i in range(10)]
@@ -1147,7 +1287,10 @@ def test_cap_is_configurable() -> None:
         max_candidates=3,
     )
 
-    with patch(_SEARCH, return_value=_approved_offers(8)), patch(_RESOLVE, side_effect=_retailer_url) as mock_resolve:
+    with (
+        patch(_SEARCH, return_value=_approved_offers(8)),
+        patch(_RESOLVE, side_effect=_retailer_url) as mock_resolve,
+    ):
         result = _run(stage.compare("Some Product"))
 
     assert [call.args[0] for call in mock_resolve.call_args_list] == ["tok-0", "tok-1", "tok-2"]
@@ -1163,7 +1306,10 @@ def test_fallbacks_still_apply_within_the_cap() -> None:
     vision_model = _FakeVisionModel()
     stage = _stage(vision_model)
 
-    with patch(_SEARCH, return_value=_approved_offers(4)), patch(_RESOLVE, side_effect=resolve_only_even):
+    with (
+        patch(_SEARCH, return_value=_approved_offers(4)),
+        patch(_RESOLVE, side_effect=resolve_only_even),
+    ):
         result = _run(stage.compare("Some Product"))
 
     assert len(result.offers) == 4
@@ -1218,21 +1364,31 @@ def test_consistent_or_incomplete_verdicts_are_left_untouched(
 ) -> None:
     verdict = _flagged_verdict(classification, brand, product)
 
-    assert shopping_comparison_stage._reconcile_verdict(verdict, _offer(1), "Some Product 1 kg") is verdict
+    assert (
+        shopping_comparison_stage._reconcile_verdict(verdict, _offer(1), "Some Product 1 kg")
+        is verdict
+    )
 
 
 def test_self_contradicting_related_verdict_is_hidden_end_to_end() -> None:
-    def classify_fn(image_paths: list[Path | None], offer_labels: list[str]) -> list[ShoppingMatchVerdict]:
+    def classify_fn(
+        image_paths: list[Path | None], offer_labels: list[str]
+    ) -> list[ShoppingMatchVerdict]:
         return [_flagged_verdict(_REL, False, False), _flagged_verdict(_REL, False, True)]
 
     vision_model = _FakeVisionModel(classify_fn=classify_fn)
     stage = _stage(vision_model)
-    offers = [_offer(1, title="Empty Ketchup Bottle"), _offer(2, title="Other Brand Tomato Ketchup")]
+    offers = [
+        _offer(1, title="Empty Ketchup Bottle"),
+        _offer(2, title="Other Brand Tomato Ketchup"),
+    ]
 
     with patch(_SEARCH, return_value=offers):
         result = _run(stage.compare("Kissan Fresh Tomato Ketchup"))
 
-    assert [c.offer.title for c in rank_comparison_offers(result.offers)] == ["Other Brand Tomato Ketchup"]
+    assert [c.offer.title for c in rank_comparison_offers(result.offers)] == [
+        "Other Brand Tomato Ketchup"
+    ]
     assert len(result.offers) == 2  # the hidden one is still stored
 
 
@@ -1261,7 +1417,9 @@ _VELURA_TITLE = (
     ],
 )
 def test_container_and_accessory_listings_are_detected(title: str) -> None:
-    assert shopping_comparison_stage._is_container_or_accessory_listing(title, "Kissan Fresh Tomato Ketchup")
+    assert shopping_comparison_stage._is_container_or_accessory_listing(
+        title, "Kissan Fresh Tomato Ketchup"
+    )
 
 
 @pytest.mark.parametrize(
@@ -1281,10 +1439,14 @@ def test_ordinary_packaged_products_are_not_treated_as_containers(title: str) ->
     assert not shopping_comparison_stage._is_container_or_accessory_listing(title, "Some Product")
 
 
-@pytest.mark.parametrize("query", ["empty ketchup bottle", "case for iPhone 17", "iPhone 17 accessories"])
+@pytest.mark.parametrize(
+    "query", ["empty ketchup bottle", "case for iPhone 17", "iPhone 17 accessories"]
+)
 def test_container_rule_is_off_when_the_query_asks_for_a_container_or_accessory(query: str) -> None:
     assert not shopping_comparison_stage._is_container_or_accessory_listing(_VELURA_TITLE, query)
-    assert not shopping_comparison_stage._is_container_or_accessory_listing("Spigen Case for iPhone 17", query)
+    assert not shopping_comparison_stage._is_container_or_accessory_listing(
+        "Spigen Case for iPhone 17", query
+    )
 
 
 @pytest.mark.parametrize("classification", [_SP, _SIZE, _REL])
@@ -1295,7 +1457,9 @@ def test_relevant_verdict_on_a_container_listing_becomes_not_relevant(
     verdict = _flagged_verdict(classification, True, True)
     offer = _offer(1, title=_VELURA_TITLE)
 
-    reconciled = shopping_comparison_stage._reconcile_verdict(verdict, offer, "Kissan Fresh Tomato Ketchup")
+    reconciled = shopping_comparison_stage._reconcile_verdict(
+        verdict, offer, "Kissan Fresh Tomato Ketchup"
+    )
 
     assert reconciled.classification == _DIFF
     assert reconciled.reason == "fake"
@@ -1304,9 +1468,13 @@ def test_relevant_verdict_on_a_container_listing_becomes_not_relevant(
 def test_no_genuine_product_in_the_pool_leaves_nothing_to_show() -> None:
     """The Kissan case end to end: only an accessory is matched by the model, so nothing is visible."""
 
-    def classify_fn(image_paths: list[Path | None], offer_labels: list[str]) -> list[ShoppingMatchVerdict]:
+    def classify_fn(
+        image_paths: list[Path | None], offer_labels: list[str]
+    ) -> list[ShoppingMatchVerdict]:
         return [
-            _flagged_verdict(_SP, True, True) if "Empty Bottle" in label else _flagged_verdict(_DIFF, False, False)
+            _flagged_verdict(_SP, True, True)
+            if "Empty Bottle" in label
+            else _flagged_verdict(_DIFF, False, False)
             for label in offer_labels
         ]
 
@@ -1356,7 +1524,9 @@ def test_query_states_size(query: str, states_size: bool) -> None:
 def test_different_size_verdict_becomes_same_product_when_query_has_no_size() -> None:
     verdict = _flagged_verdict(_SIZE, True, True)
 
-    reconciled = shopping_comparison_stage._reconcile_verdict(verdict, _offer(1, title="Maggi Noodles 560 g"), "Maggi")
+    reconciled = shopping_comparison_stage._reconcile_verdict(
+        verdict, _offer(1, title="Maggi Noodles 560 g"), "Maggi"
+    )
 
     assert reconciled.classification == _SP
 
@@ -1364,14 +1534,21 @@ def test_different_size_verdict_becomes_same_product_when_query_has_no_size() ->
 def test_different_size_verdict_is_kept_when_query_states_a_size() -> None:
     verdict = _flagged_verdict(_SIZE, True, True)
 
-    reconciled = shopping_comparison_stage._reconcile_verdict(verdict, _offer(1, title="Tata Salt 2 kg"), "Tata Salt 1 kg")
+    reconciled = shopping_comparison_stage._reconcile_verdict(
+        verdict, _offer(1, title="Tata Salt 2 kg"), "Tata Salt 1 kg"
+    )
 
     assert reconciled is verdict
 
 
 def test_sizeless_query_shows_every_size_as_same_product_end_to_end() -> None:
-    def classify_fn(image_paths: list[Path | None], offer_labels: list[str]) -> list[ShoppingMatchVerdict]:
-        return [_flagged_verdict(_SIZE if "1.26kg" in label else _SP, True, True) for label in offer_labels]
+    def classify_fn(
+        image_paths: list[Path | None], offer_labels: list[str]
+    ) -> list[ShoppingMatchVerdict]:
+        return [
+            _flagged_verdict(_SIZE if "1.26kg" in label else _SP, True, True)
+            for label in offer_labels
+        ]
 
     vision_model = _FakeVisionModel(classify_fn=classify_fn)
     stage = _stage(vision_model)

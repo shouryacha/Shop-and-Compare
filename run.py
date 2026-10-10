@@ -97,7 +97,9 @@ def build_shopping_stage() -> tuple[ShoppingComparisonStage, LocalFilesystemStor
     vision_model = NemotronVisionModel()
     storage = LocalFilesystemStorage()
 
-    stage = ShoppingComparisonStage(downloader=downloader, vision_model=vision_model, storage=storage)
+    stage = ShoppingComparisonStage(
+        downloader=downloader, vision_model=vision_model, storage=storage
+    )
     return stage, storage
 
 

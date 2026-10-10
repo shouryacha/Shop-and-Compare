@@ -102,7 +102,9 @@ def _replace_whole_words(text: str, replacements: dict[str, str]) -> str:
     """Replace whole-word, case-insensitive matches found in `replacements`, leaving everything else as-is."""
     if not replacements:
         return text
-    pattern = re.compile(r"\b(" + "|".join(re.escape(word) for word in replacements) + r")\b", re.IGNORECASE)
+    pattern = re.compile(
+        r"\b(" + "|".join(re.escape(word) for word in replacements) + r")\b", re.IGNORECASE
+    )
     return pattern.sub(lambda m: replacements[m.group(0).upper()], text)
 
 
@@ -110,7 +112,9 @@ def _remove_whole_words(text: str, words: frozenset[str]) -> str:
     """Remove whole-word, case-insensitive matches found in `words`."""
     if not words:
         return text
-    pattern = re.compile(r"\b(" + "|".join(re.escape(word) for word in words) + r")\b", re.IGNORECASE)
+    pattern = re.compile(
+        r"\b(" + "|".join(re.escape(word) for word in words) + r")\b", re.IGNORECASE
+    )
     return pattern.sub("", text)
 
 

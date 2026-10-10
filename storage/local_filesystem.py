@@ -39,7 +39,9 @@ class LocalFilesystemStorage(StorageProvider):
         """Args: images_dir: Root image directory; defaults to `config.Settings.images_dir`."""
         self._images_dir = images_dir or get_settings().images_dir
 
-    async def persist_image(self, downloaded: DownloadedImage, product_name: str, side: str) -> Path:
+    async def persist_image(
+        self, downloaded: DownloadedImage, product_name: str, side: str
+    ) -> Path:
         """Copy `downloaded.local_path` to `<images_dir>/<product_slug>/<side><ext>`."""
         product_dir = self.product_dir(product_name)
         product_dir.mkdir(parents=True, exist_ok=True)
@@ -73,7 +75,10 @@ class LocalFilesystemStorage(StorageProvider):
             persisted_paths.append(final_path)
 
         logger.info(
-            "Persisted %d gallery image(s) for %r -> %s", len(persisted_paths), product_name, product_dir
+            "Persisted %d gallery image(s) for %r -> %s",
+            len(persisted_paths),
+            product_name,
+            product_dir,
         )
         return persisted_paths
 

@@ -38,7 +38,9 @@ def _set_api_key(monkeypatch: pytest.MonkeyPatch, value: str | None) -> None:
 # --- search_product_page ----------------------------------------------------
 
 
-def test_search_product_page_builds_detail_urls_from_tokens(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_search_product_page_builds_detail_urls_from_tokens(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     _set_api_key(monkeypatch, "test-key")
     shopping_results = [
         {"position": i, "title": f"Product {i}", "immersive_product_page_token": f"token{i}"}
@@ -47,7 +49,7 @@ def test_search_product_page_builds_detail_urls_from_tokens(monkeypatch: pytest.
     with patch.object(
         google_shopping_serpapi, "_fetch_json", return_value={"shopping_results": shopping_results}
     ) as mock_fetch:
-        result = _run(google_shopping_serpapi.search_product_page(None, "test query"))  # type: ignore[arg-type]
+        result = _run(google_shopping_serpapi.search_product_page(None, "test query"))
 
     assert len(result) == 5  # capped at _MAX_CANDIDATES
     for url, i in zip(result, range(1, 6)):
@@ -60,14 +62,18 @@ def test_search_product_page_builds_detail_urls_from_tokens(monkeypatch: pytest.
     assert "gl=in" in called_url
 
 
-def test_search_product_page_skips_candidates_without_a_token(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_search_product_page_skips_candidates_without_a_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     _set_api_key(monkeypatch, "test-key")
     shopping_results = [
         {"title": "No token here"},
         {"title": "Has a token", "immersive_product_page_token": "abc123"},
     ]
-    with patch.object(google_shopping_serpapi, "_fetch_json", return_value={"shopping_results": shopping_results}):
-        result = _run(google_shopping_serpapi.search_product_page(None, "q"))  # type: ignore[arg-type]
+    with patch.object(
+        google_shopping_serpapi, "_fetch_json", return_value={"shopping_results": shopping_results}
+    ):
+        result = _run(google_shopping_serpapi.search_product_page(None, "q"))
 
     assert len(result) == 1
     assert "page_token=abc123" in result[0]
@@ -78,7 +84,7 @@ def test_search_product_page_returns_empty_list_when_no_shopping_results(
 ) -> None:
     _set_api_key(monkeypatch, "test-key")
     with patch.object(google_shopping_serpapi, "_fetch_json", return_value={}):
-        result = _run(google_shopping_serpapi.search_product_page(None, "q"))  # type: ignore[arg-type]
+        result = _run(google_shopping_serpapi.search_product_page(None, "q"))
     assert result == []
 
 
@@ -88,8 +94,10 @@ def test_search_product_page_dedupes_identical_tokens(monkeypatch: pytest.Monkey
         {"immersive_product_page_token": "same-token"},
         {"immersive_product_page_token": "same-token"},
     ]
-    with patch.object(google_shopping_serpapi, "_fetch_json", return_value={"shopping_results": shopping_results}):
-        result = _run(google_shopping_serpapi.search_product_page(None, "q"))  # type: ignore[arg-type]
+    with patch.object(
+        google_shopping_serpapi, "_fetch_json", return_value={"shopping_results": shopping_results}
+    ):
+        result = _run(google_shopping_serpapi.search_product_page(None, "q"))
     assert len(result) == 1
 
 
@@ -105,7 +113,7 @@ def test_extract_gallery_reads_all_thumbnails(monkeypatch: pytest.MonkeyPatch) -
         return_value={"product_results": {"title": "Some Product", "thumbnails": thumbnails}},
     ) as mock_fetch:
         product_url = google_shopping_serpapi._build_detail_url("my-token")
-        gallery = _run(google_shopping_serpapi.extract_gallery(None, product_url))  # type: ignore[arg-type]
+        gallery = _run(google_shopping_serpapi.extract_gallery(None, product_url))
 
     assert gallery.retailer == "Google Shopping"
     assert gallery.image_urls == thumbnails
@@ -119,14 +127,20 @@ def test_extract_gallery_reads_all_thumbnails(monkeypatch: pytest.MonkeyPatch) -
 def test_extract_gallery_raises_on_url_without_a_token(monkeypatch: pytest.MonkeyPatch) -> None:
     _set_api_key(monkeypatch, "test-key")
     with pytest.raises(SerpApiSearchError):
-        _run(google_shopping_serpapi.extract_gallery(None, "https://serpapi.com/search.json?engine=google_immersive_product"))  # type: ignore[arg-type]
+        _run(
+            google_shopping_serpapi.extract_gallery(
+                None, "https://serpapi.com/search.json?engine=google_immersive_product"
+            )
+        )
 
 
-def test_extract_gallery_empty_thumbnails_returns_empty_gallery(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_extract_gallery_empty_thumbnails_returns_empty_gallery(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     _set_api_key(monkeypatch, "test-key")
     with patch.object(google_shopping_serpapi, "_fetch_json", return_value={"product_results": {}}):
         product_url = google_shopping_serpapi._build_detail_url("my-token")
-        gallery = _run(google_shopping_serpapi.extract_gallery(None, product_url))  # type: ignore[arg-type]
+        gallery = _run(google_shopping_serpapi.extract_gallery(None, product_url))
     assert gallery.image_urls == []
     assert gallery.product_title is None
 
@@ -137,7 +151,7 @@ def test_extract_gallery_empty_thumbnails_returns_empty_gallery(monkeypatch: pyt
 def test_missing_api_key_raises_immediately(monkeypatch: pytest.MonkeyPatch) -> None:
     _set_api_key(monkeypatch, None)
     with pytest.raises(SerpApiInvalidApiKeyError):
-        _run(google_shopping_serpapi.search_product_page(None, "q"))  # type: ignore[arg-type]
+        _run(google_shopping_serpapi.search_product_page(None, "q"))
 
 
 # --- error classification (direct unit tests of the translation helpers) -----
@@ -217,7 +231,9 @@ def test_search_shopping_offers_reads_fields_directly_no_detail_call(
 def test_search_shopping_offers_caps_at_max_results(monkeypatch: pytest.MonkeyPatch) -> None:
     _set_api_key(monkeypatch, "test-key")
     results = [_shopping_result(position=i) for i in range(20)]
-    with patch.object(google_shopping_serpapi, "_fetch_json", return_value={"shopping_results": results}):
+    with patch.object(
+        google_shopping_serpapi, "_fetch_json", return_value={"shopping_results": results}
+    ):
         offers = _run(google_shopping_serpapi.search_shopping_offers("q", max_results=5))
     assert len(offers) == 5
 
@@ -231,15 +247,21 @@ def test_search_shopping_offers_skips_entries_missing_title_or_thumbnail(
         _shopping_result(thumbnail=None),
         _shopping_result(),  # complete
     ]
-    with patch.object(google_shopping_serpapi, "_fetch_json", return_value={"shopping_results": results}):
+    with patch.object(
+        google_shopping_serpapi, "_fetch_json", return_value={"shopping_results": results}
+    ):
         offers = _run(google_shopping_serpapi.search_shopping_offers("q", max_results=10))
     assert len(offers) == 1
 
 
-def test_search_shopping_offers_skips_malformed_thumbnail_url(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_search_shopping_offers_skips_malformed_thumbnail_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     _set_api_key(monkeypatch, "test-key")
     results = [_shopping_result(thumbnail="not-a-url"), _shopping_result()]
-    with patch.object(google_shopping_serpapi, "_fetch_json", return_value={"shopping_results": results}):
+    with patch.object(
+        google_shopping_serpapi, "_fetch_json", return_value={"shopping_results": results}
+    ):
         offers = _run(google_shopping_serpapi.search_shopping_offers("q", max_results=10))
     assert len(offers) == 1
 
@@ -256,15 +278,21 @@ def test_search_shopping_offers_returns_empty_list_when_no_results(
 def test_search_shopping_offers_captures_page_token(monkeypatch: pytest.MonkeyPatch) -> None:
     _set_api_key(monkeypatch, "test-key")
     results = [_shopping_result(immersive_product_page_token="my-token-xyz")]
-    with patch.object(google_shopping_serpapi, "_fetch_json", return_value={"shopping_results": results}):
+    with patch.object(
+        google_shopping_serpapi, "_fetch_json", return_value={"shopping_results": results}
+    ):
         offers = _run(google_shopping_serpapi.search_shopping_offers("q", max_results=10))
     assert offers[0].page_token == "my-token-xyz"
 
 
-def test_search_shopping_offers_page_token_none_when_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_search_shopping_offers_page_token_none_when_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     _set_api_key(monkeypatch, "test-key")
     results = [_shopping_result(immersive_product_page_token=None)]
-    with patch.object(google_shopping_serpapi, "_fetch_json", return_value={"shopping_results": results}):
+    with patch.object(
+        google_shopping_serpapi, "_fetch_json", return_value={"shopping_results": results}
+    ):
         offers = _run(google_shopping_serpapi.search_shopping_offers("q", max_results=10))
     assert offers[0].page_token is None
 
@@ -304,7 +332,11 @@ def test_resolve_direct_merchant_link_matches_the_same_canonical_retailer(
     monkeypatch: pytest.MonkeyPatch, source: str, store_name: str
 ) -> None:
     _set_api_key(monkeypatch, "test-key")
-    payload = {"product_results": {"stores": [{"name": store_name, "link": "https://retailer.example/p/1"}]}}
+    payload = {
+        "product_results": {
+            "stores": [{"name": store_name, "link": "https://retailer.example/p/1"}]
+        }
+    }
     with patch.object(google_shopping_serpapi, "_fetch_json", return_value=payload):
         link = _run(google_shopping_serpapi.resolve_direct_merchant_link("token-1", source))
     assert link == "https://retailer.example/p/1"
@@ -326,7 +358,11 @@ def test_resolve_direct_merchant_link_rejects_lookalike_store_names(
 ) -> None:
     """No substring matching: a store that merely contains the retailer's name is a different seller."""
     _set_api_key(monkeypatch, "test-key")
-    payload = {"product_results": {"stores": [{"name": store_name, "link": "https://reseller.example/p/1"}]}}
+    payload = {
+        "product_results": {
+            "stores": [{"name": store_name, "link": "https://reseller.example/p/1"}]
+        }
+    }
     with patch.object(google_shopping_serpapi, "_fetch_json", return_value=payload):
         link = _run(google_shopping_serpapi.resolve_direct_merchant_link("token-1", source))
     assert link is None
@@ -339,7 +375,10 @@ def test_resolve_direct_merchant_link_skips_a_reseller_listed_before_the_real_re
     payload = {
         "product_results": {
             "stores": [
-                {"name": "Imagine Apple Premium Reseller", "link": "https://reseller.example/iphone"},
+                {
+                    "name": "Imagine Apple Premium Reseller",
+                    "link": "https://reseller.example/iphone",
+                },
                 {"name": "Apple", "link": "https://www.apple.com/in/shop/buy-iphone"},
             ]
         }
@@ -354,7 +393,9 @@ def test_resolve_direct_merchant_link_makes_no_request_for_a_non_approved_seller
 ) -> None:
     _set_api_key(monkeypatch, "test-key")
     with patch.object(google_shopping_serpapi, "_fetch_json") as mock_fetch:
-        link = _run(google_shopping_serpapi.resolve_direct_merchant_link("token-1", "icluster technologies"))
+        link = _run(
+            google_shopping_serpapi.resolve_direct_merchant_link("token-1", "icluster technologies")
+        )
     assert link is None
     mock_fetch.assert_not_called()
 
@@ -363,22 +404,32 @@ def test_resolve_direct_merchant_link_returns_none_when_source_not_in_stores(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _set_api_key(monkeypatch, "test-key")
-    payload = {"product_results": {"stores": [{"name": "Flipkart", "link": "https://www.flipkart.com/p/x"}]}}
+    payload = {
+        "product_results": {
+            "stores": [{"name": "Flipkart", "link": "https://www.flipkart.com/p/x"}]
+        }
+    }
     with patch.object(google_shopping_serpapi, "_fetch_json", return_value=payload):
         link = _run(google_shopping_serpapi.resolve_direct_merchant_link("token-1", "Zepto"))
     assert link is None
 
 
-def test_resolve_direct_merchant_link_returns_none_when_stores_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_resolve_direct_merchant_link_returns_none_when_stores_empty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     _set_api_key(monkeypatch, "test-key")
     with patch.object(google_shopping_serpapi, "_fetch_json", return_value={"product_results": {}}):
         link = _run(google_shopping_serpapi.resolve_direct_merchant_link("token-1", "Zepto"))
     assert link is None
 
 
-def test_resolve_direct_merchant_link_returns_none_on_request_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_resolve_direct_merchant_link_returns_none_on_request_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     _set_api_key(monkeypatch, "test-key")
-    with patch.object(google_shopping_serpapi, "_fetch_json", side_effect=RuntimeError("network error")):
+    with patch.object(
+        google_shopping_serpapi, "_fetch_json", side_effect=RuntimeError("network error")
+    ):
         link = _run(google_shopping_serpapi.resolve_direct_merchant_link("token-1", "Zepto"))
     assert link is None
 

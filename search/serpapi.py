@@ -146,7 +146,7 @@ class SerpApiImageSearchProvider(ImageSearchProvider):
             raise SerpApiSearchError(f"Network error contacting SerpAPI: {exc}") from exc
 
         try:
-            payload = json.loads(body)
+            payload: dict[str, Any] = json.loads(body)
         except json.JSONDecodeError as exc:
             raise SerpApiSearchError(f"SerpAPI response was not valid JSON: {exc}") from exc
 

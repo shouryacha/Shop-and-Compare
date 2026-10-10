@@ -38,7 +38,9 @@ def _offer(title: str) -> ShoppingOffer:
 
 
 def _classified(title: str, classification: ShoppingMatchClassification) -> ClassifiedShoppingOffer:
-    verdict = ShoppingMatchVerdict(classification=classification, confidence=0.9, reason="", model_name="fake")
+    verdict = ShoppingMatchVerdict(
+        classification=classification, confidence=0.9, reason="", model_name="fake"
+    )
     return ClassifiedShoppingOffer(offer=_offer(title), verdict=verdict)
 
 
@@ -121,7 +123,9 @@ def test_group_offers_shows_ranked_deduplicated_order_without_unclassified() -> 
         title: str, classification: ShoppingMatchClassification, price: float, source: str
     ) -> ClassifiedShoppingOffer:
         offer = _offer(title).model_copy(update={"extracted_price": price, "source": source})
-        verdict = ShoppingMatchVerdict(classification=classification, confidence=0.9, reason="", model_name="fake")
+        verdict = ShoppingMatchVerdict(
+            classification=classification, confidence=0.9, reason="", model_name="fake"
+        )
         return ClassifiedShoppingOffer(offer=offer, verdict=verdict)
 
     result = _result(
@@ -130,7 +134,9 @@ def test_group_offers_shows_ranked_deduplicated_order_without_unclassified() -> 
             priced("Tata Salt 1 kg", _C.SAME_PRODUCT, 74, "amazon.in"),
             priced("Tata Salt 2 kg", _C.SAME_PRODUCT_DIFFERENT_SIZE, 55, "Zepto"),
             priced("Tata Salt 1 kg", _C.SAME_PRODUCT, 28, "Zepto"),
-            priced("Tata Salt 1 kg", _C.SAME_PRODUCT, 80, "Amazon.in"),  # duplicate of the amazon.in listing
+            priced(
+                "Tata Salt 1 kg", _C.SAME_PRODUCT, 80, "Amazon.in"
+            ),  # duplicate of the amazon.in listing
         ],
         unclassified=[_offer("Unverified Listing")],
     )
@@ -180,9 +186,19 @@ def test_render_shows_only_comparable_and_related_rows_plus_counts(ui: Any) -> N
     fake_st, rendered_rows = ui
     app._render_comparison_result(_noisy_result())
 
-    assert [title for title, _ in rendered_rows] == ["Tata Salt 1 kg", "Tata Salt 1 kg Pack of 2", "Tata Lite 1 kg"]
+    assert [title for title, _ in rendered_rows] == [
+        "Tata Salt 1 kg",
+        "Tata Salt 1 kg Pack of 2",
+        "Tata Lite 1 kg",
+    ]
     rendered_titles = {title for title, _ in rendered_rows}
-    for never_shown in ("Silk Saree", "Wrist Watch", "Titanium Bar", "Unverified Listing A", "Unverified Listing B"):
+    for never_shown in (
+        "Silk Saree",
+        "Wrist Watch",
+        "Titanium Bar",
+        "Unverified Listing A",
+        "Unverified Listing B",
+    ):
         assert never_shown not in rendered_titles
     assert "3 unrelated listings hidden · 2 offers couldn't be verified" in fake_st.texts("caption")
     assert fake_st.texts("info") == []
@@ -199,7 +215,9 @@ def test_render_empty_state_when_only_irrelevant_and_unverified_offers(ui: Any) 
 
     assert rendered_rows == []
     assert fake_st.texts("info") == ["No matching offers found for this product."]
-    assert "13 unrelated listings hidden · 2 offers couldn't be verified" in fake_st.texts("caption")
+    assert "13 unrelated listings hidden · 2 offers couldn't be verified" in fake_st.texts(
+        "caption"
+    )
 
 
 def test_render_empty_state_for_a_genuinely_empty_search(ui: Any) -> None:
@@ -216,13 +234,17 @@ def test_render_search_failure_is_not_an_empty_state(ui: Any) -> None:
     app._render_comparison_result(_result(search_failed=True))
 
     assert rendered_rows == []
-    assert fake_st.texts("warning") == ["Couldn't check shopping offers right now. Please try again."]
+    assert fake_st.texts("warning") == [
+        "Couldn't check shopping offers right now. Please try again."
+    ]
     assert fake_st.texts("info") == []
 
 
 def test_render_related_only_is_not_an_empty_state(ui: Any) -> None:
     fake_st, rendered_rows = ui
-    app._render_comparison_result(_result(classified=[_classified("Saffola Muesli 500g", _C.RELATED_PRODUCT)]))
+    app._render_comparison_result(
+        _result(classified=[_classified("Saffola Muesli 500g", _C.RELATED_PRODUCT)])
+    )
 
     assert [title for title, _ in rendered_rows] == ["Saffola Muesli 500g"]
     assert fake_st.texts("info") == []
@@ -231,7 +253,9 @@ def test_render_related_only_is_not_an_empty_state(ui: Any) -> None:
 def test_render_shows_no_matching_offers_when_only_an_accessory_was_found(ui: Any) -> None:
     """The Kissan case: the only match was an empty bottle, which the stage marks not relevant."""
     fake_st, rendered_rows = ui
-    accessory = _classified("VELURA Mini Tomato Ketchup Bottle - 1 Empty Bottle", _C.DIFFERENT_VARIANT)
+    accessory = _classified(
+        "VELURA Mini Tomato Ketchup Bottle - 1 Empty Bottle", _C.DIFFERENT_VARIANT
+    )
 
     app._render_comparison_result(_result(classified=[accessory]))
 
@@ -255,13 +279,14 @@ class _Container:
         self._fake.stack.append(self.id)
         return self
 
-    def __exit__(self, *exc: object) -> bool:
+    def __exit__(self, *exc: object) -> None:
         self._fake.stack.pop()
-        return False
 
 
 class _Call:
-    def __init__(self, name: str, args: tuple[Any, ...], kwargs: dict[str, Any], container: int | None) -> None:
+    def __init__(
+        self, name: str, args: tuple[Any, ...], kwargs: dict[str, Any], container: int | None
+    ) -> None:
         self.name = name
         self.args = args
         self.kwargs = kwargs
@@ -339,7 +364,9 @@ def _priced_offer(
     )
 
 
-def test_card_puts_image_first_and_price_with_button_in_a_right_aligned_column(card: _RecordingStreamlit) -> None:
+def test_card_puts_image_first_and_price_with_button_in_a_right_aligned_column(
+    card: _RecordingStreamlit,
+) -> None:
     app._render_offer_row(_priced_offer(), "green", "Same product")
 
     outer = card.in_container(border=True, horizontal=True)
@@ -349,11 +376,20 @@ def test_card_puts_image_first_and_price_with_button_in_a_right_aligned_column(c
 
     outer_children = [call.name for call in card.calls if call.container == outer]
     assert outer_children[0] == "image"  # image on the left
-    assert outer_children.count("container") == 2  # then the info column and the price column, in that order
+    assert (
+        outer_children.count("container") == 2
+    )  # then the info column and the price column, in that order
 
-    assert [call.name for call in card.calls if call.container == info] == ["markdown", "markdown", "badge"]
+    assert [call.name for call in card.calls if call.container == info] == [
+        "markdown",
+        "markdown",
+        "badge",
+    ]
     # The price and the button live together in the right-hand column, price directly above the button.
-    assert [call.name for call in card.calls if call.container == price_column] == ["subheader", "link_button"]
+    assert [call.name for call in card.calls if call.container == price_column] == [
+        "subheader",
+        "link_button",
+    ]
 
 
 def test_price_is_a_large_heading_not_small_text(card: _RecordingStreamlit) -> None:
@@ -365,11 +401,15 @@ def test_price_is_a_large_heading_not_small_text(card: _RecordingStreamlit) -> N
     assert card.named("caption") == []  # not buried in caption text
 
 
-def test_related_alternative_card_has_a_smaller_price_and_a_quieter_button(card: _RecordingStreamlit) -> None:
+def test_related_alternative_card_has_a_smaller_price_and_a_quieter_button(
+    card: _RecordingStreamlit,
+) -> None:
     app._render_offer_row(_priced_offer(), "blue", "Related alternative", compact=True)
 
     assert card.named("subheader") == []
-    assert [call.args for call in card.named("markdown") if call.args[0].startswith("####")] == [("#### ₹99",)]
+    assert [call.args for call in card.named("markdown") if call.args[0].startswith("####")] == [
+        ("#### ₹99",)
+    ]
     assert card.named("link_button")[0].kwargs["type"] == "secondary"
 
 
@@ -422,7 +462,9 @@ def test_image_has_one_bounded_width(card: _RecordingStreamlit) -> None:
 def test_retailer_is_shown_by_its_plain_name(card: _RecordingStreamlit) -> None:
     app._render_offer_row(_priced_offer(source="amazon.in"), "green", "Same product")
 
-    retailer_lines = [call.args[0] for call in card.named("markdown") if "storefront" in call.args[0]]
+    retailer_lines = [
+        call.args[0] for call in card.named("markdown") if "storefront" in call.args[0]
+    ]
     assert retailer_lines == [":material/storefront: Amazon"]
 
 
@@ -456,7 +498,9 @@ def test_no_raw_url_text_appears_on_the_card(card: _RecordingStreamlit) -> None:
 
 
 def test_long_title_is_cut_and_whitespace_collapsed(card: _RecordingStreamlit) -> None:
-    long_title = "MAGGI 2-Minute Instant Noodles,   Masala  " + "Made With Choicest Quality Spices " * 10
+    long_title = (
+        "MAGGI 2-Minute Instant Noodles,   Masala  " + "Made With Choicest Quality Spices " * 10
+    )
 
     app._render_offer_row(_priced_offer(title=long_title), "green", "Same product")
 
@@ -486,7 +530,9 @@ def test_listing_text_cannot_inject_markdown(text: str, escaped: str) -> None:
 
 
 def test_title_and_price_are_escaped_on_the_card(card: _RecordingStreamlit) -> None:
-    app._render_offer_row(_priced_offer(title="Salt *Premium* $5", price="$829.00"), "green", "Same product")
+    app._render_offer_row(
+        _priced_offer(title="Salt *Premium* $5", price="$829.00"), "green", "Same product"
+    )
 
     assert card.named("markdown")[0].args == (r"**Salt \*Premium\* \$5**",)
     assert card.named("subheader")[0].args == (r"\$829.00",)
@@ -501,11 +547,15 @@ def test_shop_tab_goes_straight_to_the_search_box(card: _RecordingStreamlit) -> 
     # The page-level title and tagline live in main(); the tab does not repeat them.
     assert card.named("header") == []
     assert card.named("caption") == []
-    assert card.named("text_input")[0].args[0] == "Product name"  # the existing search input is kept
+    assert (
+        card.named("text_input")[0].args[0] == "Product name"
+    )  # the existing search input is kept
     assert card.named("button")[0].args[0] == "Compare offers"
 
 
-def test_page_is_branded_shop_and_compare(card: _RecordingStreamlit, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_page_is_branded_shop_and_compare(
+    card: _RecordingStreamlit, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr(app, "_render_single_product_tab", lambda: None)
     monkeypatch.setattr(app, "_render_shopping_comparison_tab", lambda: None)
 
@@ -516,18 +566,24 @@ def test_page_is_branded_shop_and_compare(card: _RecordingStreamlit, monkeypatch
     (title,) = card.named("title")
     assert title.args == ("Shop & Compare",)
     (tagline,) = card.named("caption")
-    assert tagline.args == ("Compare prices from trusted retailers. Find the right product, faster.",)
+    assert tagline.args == (
+        "Compare prices from trusted retailers. Find the right product, faster.",
+    )
     # Page config first, then title, tagline, tabs.
     assert [call.name for call in card.calls][:4] == ["set_page_config", "title", "caption", "tabs"]
 
 
-def test_old_product_image_retriever_name_is_not_shown(card: _RecordingStreamlit, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_old_product_image_retriever_name_is_not_shown(
+    card: _RecordingStreamlit, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr(app, "_render_single_product_tab", lambda: None)
     monkeypatch.setattr(app, "_render_shopping_comparison_tab", lambda: None)
 
     app.main()
 
-    shown = " ".join(str(value).lower() for call in card.calls for value in (*call.args, *call.kwargs.values()))
+    shown = " ".join(
+        str(value).lower() for call in card.calls for value in (*call.args, *call.kwargs.values())
+    )
     assert "image retriever" not in shown
 
 
@@ -568,5 +624,11 @@ def test_sections_are_headed_comparable_then_related_with_counts(
 
     headings = [call.args[0] for call in card.named("markdown")]
     assert headings == ["**Comparable offers** · 2", "**Related alternatives** · 1"]
-    assert "Not the exact product, but worth considering" in [call.args[0] for call in card.named("caption")]
-    assert rows == [("Tata Salt 1 kg", False), ("Tata Salt 1 kg Pack of 2", False), ("Tata Lite 1 kg", True)]
+    assert "Not the exact product, but worth considering" in [
+        call.args[0] for call in card.named("caption")
+    ]
+    assert rows == [
+        ("Tata Salt 1 kg", False),
+        ("Tata Salt 1 kg Pack of 2", False),
+        ("Tata Lite 1 kg", True),
+    ]

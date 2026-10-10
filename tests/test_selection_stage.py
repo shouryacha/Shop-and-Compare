@@ -85,7 +85,9 @@ class _FakeSearchProvider(ImageSearchProvider):
     async def search(self, query: SearchQuery, max_results: int) -> list[ImageCandidate]:
         return [
             ImageCandidate(
-                url="https://example.com/candidate.jpg", source_provider=self.name, source_query=query
+                url="https://example.com/candidate.jpg",
+                source_provider=self.name,
+                source_query=query,
             )
         ]
 
@@ -96,7 +98,9 @@ class _FakeDownloader(ImageDownloader):
 
 
 class _FakeStorage(StorageProvider):
-    async def persist_image(self, downloaded: DownloadedImage, product_name: str, side: str) -> Path:
+    async def persist_image(
+        self, downloaded: DownloadedImage, product_name: str, side: str
+    ) -> Path:
         return Path(f"/fake/images/{product_name}/{side}.jpg")
 
     async def persist_result(self, result: ProductImageResult) -> None:
@@ -112,7 +116,11 @@ class _FakeVisionModel:
         self, image_paths: list[Path], product_name: str, side: ImageSide
     ) -> tuple[int, ClassificationVerdict]:
         verdict = ClassificationVerdict(
-            is_correct_product=True, side=side, confidence=0.9, reasoning="fake", model_name=self.name
+            is_correct_product=True,
+            side=side,
+            confidence=0.9,
+            reasoning="fake",
+            model_name=self.name,
         )
         return 0, verdict
 

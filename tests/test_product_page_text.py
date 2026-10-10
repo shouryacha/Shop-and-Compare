@@ -7,6 +7,7 @@ page's HTML, and the fetch wrapper's fallbacks. The HTTP boundary
 from __future__ import annotations
 
 import asyncio
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -38,7 +39,7 @@ _PRODUCT_PAGE = """
 """
 
 
-def _fetch(url: str, **kwargs: int) -> str | None:
+def _fetch(url: str, **kwargs: Any) -> str | None:
     return asyncio.run(fetch_product_page_text(url, **kwargs))
 
 
@@ -113,7 +114,9 @@ def test_whitespace_is_collapsed_and_duplicate_fields_are_dropped() -> None:
     assert extract_product_text(html) == "Page title: Tata Salt 1 kg"
 
 
-@pytest.mark.parametrize("html", ["", "   ", "<html><body><script>var x = 1;</script></body></html>"])
+@pytest.mark.parametrize(
+    "html", ["", "   ", "<html><body><script>var x = 1;</script></body></html>"]
+)
 def test_page_without_useful_text_yields_nothing(html: str) -> None:
     assert extract_product_text(html) == ""
 
@@ -122,7 +125,9 @@ def test_page_without_useful_text_yields_nothing(html: str) -> None:
 
 
 def test_fetch_returns_extracted_text_on_success() -> None:
-    with patch.object(product_page_text, "_fetch_html", return_value=_PRODUCT_PAGE) as mock_fetch_html:
+    with patch.object(
+        product_page_text, "_fetch_html", return_value=_PRODUCT_PAGE
+    ) as mock_fetch_html:
         text = _fetch("https://www.examplemart.in/p/tata-salt")
 
     mock_fetch_html.assert_called_once_with("https://www.examplemart.in/p/tata-salt")
@@ -167,7 +172,9 @@ def test_search_result_pages_and_non_http_urls_are_never_fetched(url: str) -> No
 
 
 def test_retailer_domains_containing_the_word_google_elsewhere_are_still_fetched() -> None:
-    with patch.object(product_page_text, "_fetch_html", return_value="<title>Product</title>") as mock_fetch_html:
+    with patch.object(
+        product_page_text, "_fetch_html", return_value="<title>Product</title>"
+    ) as mock_fetch_html:
         assert _fetch("https://www.googlestore-reseller.example/p/1") == "Page title: Product"
 
     mock_fetch_html.assert_called_once()
@@ -231,5 +238,11 @@ def test_visible_sentences_about_the_candidate_are_kept_and_others_dropped() -> 
 def test_fetch_passes_the_candidate_title_through() -> None:
     generic = "<title>JioMart: India's online shopping</title>"
     with patch.object(product_page_text, "_fetch_html", return_value=generic):
-        assert _fetch("https://www.jiomart.example/p/1", about="Tata Iodised Crystal Salt 1 kg") is None
-        assert _fetch("https://www.jiomart.example/p/1") == "Page title: JioMart: India's online shopping"
+        assert (
+            _fetch("https://www.jiomart.example/p/1", about="Tata Iodised Crystal Salt 1 kg")
+            is None
+        )
+        assert (
+            _fetch("https://www.jiomart.example/p/1")
+            == "Page title: JioMart: India's online shopping"
+        )

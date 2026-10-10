@@ -137,7 +137,8 @@ import re
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Any, Final
+from collections.abc import Sequence
+from typing import Any, Final, cast
 
 from pydantic import ValidationError
 
@@ -482,14 +483,18 @@ class NemotronVisionModel:
 
         try:
             image_b64, mime_type = self._load_image(image_path)
-            messages = self._build_match_messages(image_b64, mime_type, product_name, candidate_title)
+            messages = self._build_match_messages(
+                image_b64, mime_type, product_name, candidate_title
+            )
             raw_response = await self._classify(messages)
             verdict = self._parse_match_response(raw_response)
         except VisionModelError:
             raise
         except Exception as exc:  # noqa: BLE001 - translated to a domain error below
             logger.exception("Unexpected failure verifying product match for image=%s", image_path)
-            raise VisionModelError(f"Failed to verify product match for {image_path}: {exc}") from exc
+            raise VisionModelError(
+                f"Failed to verify product match for {image_path}: {exc}"
+            ) from exc
 
         logger.info(
             "Verified image=%s: is_match=%s confidence=%.2f",
@@ -517,7 +522,9 @@ class NemotronVisionModel:
                 "content": [
                     {
                         "type": "text",
-                        "text": render_product_match_verification_prompt(product_name, candidate_title),
+                        "text": render_product_match_verification_prompt(
+                            product_name, candidate_title
+                        ),
                     },
                     {"type": "image_url", "image_url": {"url": data_uri}},
                 ],
@@ -565,7 +572,7 @@ class NemotronVisionModel:
 
     async def classify_shopping_offers(
         self,
-        image_paths: list[Path | None],
+        image_paths: Sequence[Path | None],
         product_name: str,
         offer_labels: list[str],
         canonical_title: str | None = None,
@@ -617,11 +624,15 @@ class NemotronVisionModel:
         )
 
         try:
-            loaded_images = [self._load_image(path) if path is not None else None for path in image_paths]
+            loaded_images = [
+                self._load_image(path) if path is not None else None for path in image_paths
+            ]
             messages = self._build_shopping_classification_messages(
                 loaded_images, product_name, offer_labels, canonical_title
             )
-            raw_response = await self._classify(messages, max_tokens=_SHOPPING_CLASSIFICATION_MAX_TOKENS)
+            raw_response = await self._classify(
+                messages, max_tokens=_SHOPPING_CLASSIFICATION_MAX_TOKENS
+            )
             verdicts = self._parse_shopping_classification_response(raw_response, len(image_paths))
         except VisionModelError:
             raise
@@ -702,7 +713,9 @@ class NemotronVisionModel:
         except json.JSONDecodeError as exc:
             payload = self._salvage_shopping_classifications(cleaned)
             if payload is None:
-                raise VisionModelError(f"Model response was not valid JSON: {raw_response!r}") from exc
+                raise VisionModelError(
+                    f"Model response was not valid JSON: {raw_response!r}"
+                ) from exc
             logger.warning(
                 "Shopping classification response was not valid JSON (%s); recovered %d entr(y/ies) "
                 "from its required fields",
@@ -711,7 +724,9 @@ class NemotronVisionModel:
             )
 
         if not isinstance(payload, dict) or not isinstance(payload.get("classifications"), list):
-            raise VisionModelError(f"Model response JSON missing 'classifications' list: {raw_response!r}")
+            raise VisionModelError(
+                f"Model response JSON missing 'classifications' list: {raw_response!r}"
+            )
 
         by_index: dict[int, ShoppingMatchVerdict] = {}
         for entry in payload["classifications"]:
@@ -738,12 +753,16 @@ class NemotronVisionModel:
                     f"Model returned image_index={image_index}, out of range 1..{num_images}: {payload!r}"
                 )
             if image_index in by_index:
-                raise VisionModelError(f"Model returned duplicate image_index={image_index}: {payload!r}")
+                raise VisionModelError(
+                    f"Model returned duplicate image_index={image_index}: {payload!r}"
+                )
             by_index[image_index] = verdict
 
         if len(by_index) != num_images:
             missing = sorted(set(range(1, num_images + 1)) - by_index.keys())
-            raise VisionModelError(f"Model response is missing classification(s) for image_index={missing}")
+            raise VisionModelError(
+                f"Model response is missing classification(s) for image_index={missing}"
+            )
 
         return [by_index[i] for i in range(1, num_images + 1)]
 
@@ -879,16 +898,16 @@ class NemotronVisionModel:
             if attempt < max_attempts:
                 logger.warning(
                     "NVIDIA Build call failed (attempt %d/%d): %s - retrying",
-                    attempt, max_attempts, last_error,
+                    attempt,
+                    max_attempts,
+                    last_error,
                 )
                 await asyncio.sleep(_VISION_RETRY_BACKOFF_SECONDS)
 
         assert last_error is not None
         raise last_error
 
-    def _log_request_debug(
-        self, url: str, body: dict[str, Any], headers: dict[str, str]
-    ) -> None:
+    def _log_request_debug(self, url: str, body: dict[str, Any], headers: dict[str, str]) -> None:
         """
         DEBUG-level visibility into exactly what's about to be sent to NVIDIA
         Build, with the API key masked and any base64 image data truncated -
@@ -913,7 +932,7 @@ class NemotronVisionModel:
         masked = dict(headers)
         auth = masked.get("Authorization")
         if auth and auth.lower().startswith("bearer "):
-            token = auth[len("Bearer "):]
+            token = auth[len("Bearer ") :]
             visible = token[:4]
             masked["Authorization"] = f"Bearer {visible}{'*' * max(len(token) - 4, 0)}"
         return masked
@@ -974,7 +993,7 @@ class NemotronVisionModel:
             raise VisionModelError(f"Network error calling NVIDIA Build: {exc}") from exc
 
         try:
-            return json.loads(response_body)
+            return cast(dict[str, Any], json.loads(response_body))
         except json.JSONDecodeError as exc:
             raise VisionModelError(f"NVIDIA Build response was not valid JSON: {exc}") from exc
 
@@ -1016,9 +1035,7 @@ class NemotronVisionModel:
                 "NVIDIA Build response has no message.content. Full raw JSON response:\n%s",
                 json.dumps(payload, indent=2),
             )
-            raise VisionModelError(
-                f"Unexpected NVIDIA Build response shape: {payload!r}"
-            ) from exc
+            raise VisionModelError(f"Unexpected NVIDIA Build response shape: {payload!r}") from exc
 
         if not content:
             logger.error(
@@ -1027,4 +1044,4 @@ class NemotronVisionModel:
             )
             raise VisionModelError("NVIDIA Build returned an empty message.content")
 
-        return content
+        return cast(str, content)

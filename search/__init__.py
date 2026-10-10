@@ -3,9 +3,8 @@ Search: retailer-native search (the primary path) and the Google Images
 fallback (via SerpAPI).
 
 Contents:
-    - `retailers/` - the active Amazon and Google Shopping adapters (both
-      SerpApi-backed), plus dormant Playwright-based modules kept as a
-      rollback, each exposing `search_product_page(page, query) -> list[str]`
+    - `retailers/` - the Amazon and Google Shopping adapters (both
+      SerpApi-backed), each exposing `search_product_page(page, query) -> list[str]`
       (candidate product URLs, own ranking order) and
       `extract_gallery(page, url)`. Not driven through `ImageSearchProvider`
       - see `retailers/__init__.py`.
@@ -23,5 +22,5 @@ Contents:
       Search-only; verification always uses the original, unmodified ERP name.
 
 Wiring for all of the above lives in `run.build_stage()`, the single
-composition root reused by the CLI, the Streamlit app, and batch processing.
+composition root reused by the CLI and the Streamlit app.
 """

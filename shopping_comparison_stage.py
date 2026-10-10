@@ -130,6 +130,7 @@ _MAX_OFFERS_PER_CLASSIFICATION_BATCH: Final[int] = 5
 _BATCH_ATTEMPTS: Final[int] = 3
 _BATCH_RETRY_DELAY_SECONDS: Final[float] = 5.0
 
+
 def _build_offer_label(number: int, offer: ShoppingOffer, page_text: str | None) -> str:
     """
     One candidate's text evidence for Nemotron: listing details plus
@@ -152,7 +153,9 @@ def _build_offer_label(number: int, offer: ShoppingOffer, page_text: str | None)
 # "cap only", "case for <product>", "accessories". Deliberately narrow - a
 # bare "bottle", "jar", "pouch" or "pack" is how real products are packaged
 # and never matches on its own.
-_CONTAINER_WORDS: Final[str] = r"(?:bottle|jar|container|box|tin|can|pouch|packet|packaging|dispenser|tube|cap|lid|case|cover)s?"
+_CONTAINER_WORDS: Final[str] = (
+    r"(?:bottle|jar|container|box|tin|can|pouch|packet|packaging|dispenser|tube|cap|lid|case|cover)s?"
+)
 _CONTAINER_OR_ACCESSORY_MARKERS: Final[re.Pattern[str]] = re.compile(
     rf"\bempty\b(?:\W+\w+){{0,2}}?\W+{_CONTAINER_WORDS}\b"
     rf"|\b{_CONTAINER_WORDS}\W+only\b"
@@ -188,7 +191,9 @@ def _is_container_or_accessory_listing(title: str, query: str) -> bool:
     return _CONTAINER_OR_ACCESSORY_MARKERS.search(title) is not None
 
 
-def _reconcile_verdict(verdict: ShoppingMatchVerdict, offer: ShoppingOffer, query: str) -> ShoppingMatchVerdict:
+def _reconcile_verdict(
+    verdict: ShoppingMatchVerdict, offer: ShoppingOffer, query: str
+) -> ShoppingMatchVerdict:
     """
     Deterministic consistency rules applied to a model verdict. They never
     make an offer relevant; they only correct verdicts that contradict the
@@ -217,7 +222,9 @@ def _reconcile_verdict(verdict: ShoppingMatchVerdict, offer: ShoppingOffer, quer
                 offer.title[:80],
                 classification.value,
             )
-            return verdict.model_copy(update={"classification": ShoppingMatchClassification.DIFFERENT_VARIANT})
+            return verdict.model_copy(
+                update={"classification": ShoppingMatchClassification.DIFFERENT_VARIANT}
+            )
         if verdict.brand_match is False and verdict.product_match is False:
             logger.info(
                 "[Shopping comparison] verdict %s contradicts the model's own brand_match=False and "
@@ -225,10 +232,17 @@ def _reconcile_verdict(verdict: ShoppingMatchVerdict, offer: ShoppingOffer, quer
                 classification.value,
                 verdict.reason,
             )
-            return verdict.model_copy(update={"classification": ShoppingMatchClassification.DIFFERENT_VARIANT})
+            return verdict.model_copy(
+                update={"classification": ShoppingMatchClassification.DIFFERENT_VARIANT}
+            )
 
-    if classification == ShoppingMatchClassification.SAME_PRODUCT_DIFFERENT_SIZE and not _query_states_size(query):
-        return verdict.model_copy(update={"classification": ShoppingMatchClassification.SAME_PRODUCT})
+    if (
+        classification == ShoppingMatchClassification.SAME_PRODUCT_DIFFERENT_SIZE
+        and not _query_states_size(query)
+    ):
+        return verdict.model_copy(
+            update={"classification": ShoppingMatchClassification.SAME_PRODUCT}
+        )
 
     return verdict
 
@@ -268,7 +282,9 @@ def _comparison_sort_key(classified: ClassifiedShoppingOffer) -> tuple[int, bool
     )
 
 
-def _duplicate_key(classified: ClassifiedShoppingOffer) -> tuple[str, ShoppingMatchClassification, str]:
+def _duplicate_key(
+    classified: ClassifiedShoppingOffer,
+) -> tuple[str, ShoppingMatchClassification, str]:
     """Same retailer + same classification + same normalized title = the same listing."""
     offer = classified.offer
     retailer = canonical_retailer(offer.source) or normalize_source(offer.source or "")
@@ -339,7 +355,11 @@ class ShoppingComparisonStage:
 
         candidates = _keep_approved_retailers(offers)
         discarded_sellers = sorted(
-            {offer.source or "(no seller name)" for offer in offers if canonical_retailer(offer.source) is None}
+            {
+                offer.source or "(no seller name)"
+                for offer in offers
+                if canonical_retailer(offer.source) is None
+            }
         )
         logger.info(
             "Kept %d of %d offer(s) from approved retailers; discarded sellers: %s",
@@ -350,7 +370,9 @@ class ShoppingComparisonStage:
 
         if len(candidates) > self._max_candidates:
             logger.info(
-                "Processing the first %d of %d approved candidate(s) (cap)", self._max_candidates, len(candidates)
+                "Processing the first %d of %d approved candidate(s) (cap)",
+                self._max_candidates,
+                len(candidates),
             )
             candidates = candidates[: self._max_candidates]
 
@@ -364,7 +386,9 @@ class ShoppingComparisonStage:
             search_failed=search_failed,
         )
 
-    async def _search_shopping_offers(self, search_query_text: str) -> tuple[list[ShoppingOffer], bool]:
+    async def _search_shopping_offers(
+        self, search_query_text: str
+    ) -> tuple[list[ShoppingOffer], bool]:
         """
         Wraps `google_shopping_serpapi.search_shopping_offers` with the same
         skip-and-continue resilience used throughout the rest of this
@@ -414,9 +438,17 @@ class ShoppingComparisonStage:
         with tempfile.TemporaryDirectory(prefix="pir_shopping_offers_") as tmp_dir:
             destination_dir = Path(tmp_dir)
             downloaded, page_texts = await asyncio.gather(
-                asyncio.gather(*(self._download_offer_thumbnail(offer, query, destination_dir) for offer in offers)),
                 asyncio.gather(
-                    *(fetch_product_page_text(str(offer.product_link), about=offer.title) for offer in offers)
+                    *(
+                        self._download_offer_thumbnail(offer, query, destination_dir)
+                        for offer in offers
+                    )
+                ),
+                asyncio.gather(
+                    *(
+                        fetch_product_page_text(str(offer.product_link), about=offer.title)
+                        for offer in offers
+                    )
                 ),
             )
             candidates = list(zip(offers, downloaded, page_texts))
@@ -472,7 +504,9 @@ class ShoppingComparisonStage:
 
         for attempt in range(1, _BATCH_ATTEMPTS + 1):
             try:
-                verdicts = await self._vision_model.classify_shopping_offers(image_paths, product_name, offer_labels)
+                verdicts = await self._vision_model.classify_shopping_offers(
+                    image_paths, product_name, offer_labels
+                )
                 verdicts = [
                     _reconcile_verdict(verdict, offer, product_name)
                     for (offer, _, _), verdict in zip(batch, verdicts)
@@ -531,7 +565,9 @@ class ShoppingComparisonStage:
         # never raises by contract, but one unexpected error must not lose the whole comparison.
         resolved_links = await asyncio.gather(
             *(
-                google_shopping_serpapi.resolve_direct_merchant_link(page_token, offers[indices[0]].source)
+                google_shopping_serpapi.resolve_direct_merchant_link(
+                    page_token, offers[indices[0]].source
+                )
                 for (page_token, _), indices in indices_by_key.items()
             ),
             return_exceptions=True,

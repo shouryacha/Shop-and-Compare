@@ -1,10 +1,7 @@
 # Handoff — Shop & Compare
 
 Current-state engineering notes for anyone picking this project up. For setup and usage see
-[README.md](README.md). The original chronological log (written before the project became
-Shop & Compare, and describing several behaviors that no longer exist) is archived in
-[docs/archive/HANDOFF-history.md](docs/archive/HANDOFF-history.md); read it only for the rationale
-behind old decisions.
+[README.md](README.md); contributor rules for humans and AI assistants are in [CLAUDE.md](CLAUDE.md).
 
 ## 1. What the project is
 
@@ -13,6 +10,8 @@ A Streamlit app (`app.py`) with two tabs:
 - **Shop & Compare** (the main feature): one product name in, a price-sorted list of offer cards out.
 - **Single product**: retrieves verified product images for one product name (older feature, still
   supported, also available as a CLI via `run.py`).
+
+`scripts/demo_app.py` runs the real UI on clearly labelled sample data with no keys or network.
 
 Everything is offline-testable: the test suite fakes every provider and a network guard
 (`tests/conftest.py`) fails any test that tries to reach a non-local host.
@@ -38,7 +37,7 @@ SerpApi Google Shopping search (1 call)
 | Filtering | `canonical_retailer()` does **exact** matching of the normalized seller name against an alias table. Never substring matching. Unknown sellers are discarded with no fallback. |
 | Candidate cap | `_MAX_CANDIDATES = 10`, taken in Google's order. This bounds SerpApi usage (1 + 10 calls) and NVIDIA load. |
 | URL resolution | `resolve_direct_merchant_link()` calls `google_immersive_product` for each candidate. The URL resolved here is the one the UI links to; it is never resolved twice. |
-| Evidence | Title, retailer, price and URL, plus bounded text from the retailer page (`fetch_product_page_text`, never raises, returns `None` on any failure). The thumbnail is supplemental. Nothing is required: a missing URL, page or thumbnail just means less evidence. |
+| Evidence | Title, retailer, price and URL, plus bounded text from the retailer page (`fetch_product_page_text`, never raises, returns `None` on any failure). The thumbnail is supplemental. Nothing is required: a missing URL, page or thumbnail just means less evidence. The page fetch goes through `utils/safe_http.py` (see section 4a). |
 | Classification | Batches of at most `_MAX_OFFERS_PER_CLASSIFICATION_BATCH = 5`, run concurrently; each failed batch is tried `_BATCH_ATTEMPTS = 3` times with 5 s then 10 s pauses. Response limit `_SHOPPING_CLASSIFICATION_MAX_TOKENS = 800`. Malformed JSON is salvaged by a tolerant parser; unknown labels are mapped by `_SHOPPING_LABEL_ALIASES` (for example `not_relevant` → `different_variant`). |
 | Ranking | Classification order (same product, same product in another size, related), then cheapest, then Google's position; only the cheapest duplicate per retailer and classification is kept. `different_variant` offers are excluded from the ranked list. |
 | Display | *Comparable offers* (same product, same product different size), *Related alternatives*, and a caption counting hidden unrelated listings and offers that "couldn't be verified". |
@@ -85,13 +84,38 @@ No browser is launched anywhere in this path (`page` is passed as `None`).
 | `run.py` | CLI plus the composition roots `build_stage()` (single product) and `build_shopping_stage()` (Shop & Compare). |
 | `shopping_comparison_stage.py` | Shop & Compare orchestration, batching, retries, reconciliation, ranking. |
 | `shopping_retailers.py` | `APPROVED_RETAILERS`, `normalize_source`, `canonical_retailer`. |
-| `product_page_text.py` | Standard-library HTML text extraction with an 8 s fetch timeout and a 700-character cap. |
+| `product_page_text.py` | Standard-library HTML text extraction with a 700-character cap; fetches through `utils/safe_http.py` (8 s per socket operation, 15 s total, 400 kB). |
 | `classifier/nemotron.py` | NVIDIA Build client: `verify_product_match`, `select_best_candidate`, `classify_shopping_offers`. Model `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning`, thinking disabled, at most 5 images per request. |
 | `prompts.py` | All prompts. |
 | `models.py` | Pydantic models (`ShoppingOffer`, `ShoppingMatchVerdict`, `ClassifiedShoppingOffer`, `ShoppingComparisonResult`, `ProductImageResult`, ...). |
 | `config.py` | `pydantic-settings` `Settings`; env prefix `PIR_`, plus the bare `NVIDIA_API_KEY`. The only place that reads the environment. |
-| `search/` | Query normalization/generation, SerpApi Google Images, and `retailers/` (Amazon and Google Shopping via SerpApi). |
+| `search/` | Query normalization/generation, SerpApi Google Images, and `retailers/` (Amazon and Google Shopping via SerpApi). Retailer adapters take a vestigial `page` argument that is always `None` (no browser is used anywhere). |
+| `utils/safe_http.py` | SSRF-safe HTTP fetch for untrusted URLs (section 4a). |
 | `download/`, `storage/`, `utils/` | Image downloader, local filesystem persistence, logging/slug/hash helpers. |
+| `scripts/demo_app.py` | Offline demo UI on sample data (also how the README screenshots were made). |
+
+## 4a. Fetching untrusted URLs
+
+Retailer URLs come from search results, so `utils/safe_http.py` fetches them under an explicit
+policy, applied to the first URL and to every redirect hop:
+
+- http/https only, no credentials in the URL, ports 80/443 only;
+- the host must be a real DNS name: no IP literals in any notation, no single-label or
+  `localhost`/`.local`/`.internal`-style names;
+- at most 3 redirects;
+- every address the host resolves to must be globally routable (this rejects loopback, private,
+  link-local, CGNAT, multicast and cloud-metadata addresses, including IPv4-mapped, 6to4 and NAT64
+  forms). The check runs on the exact addresses then connected to, so DNS cannot change in between;
+- environment proxies are ignored (the address check would otherwise apply to the proxy);
+- body capped at 400 kB and total time at 15 s.
+
+A refusal is handled like any other fetch failure: the candidate falls back to title and thumbnail
+evidence. There is no per-retailer domain allowlist; the approved-retailer name filter limits which
+sellers get this far, and verifying every merchant domain would need live traffic. Tests
+(`tests/test_safe_http.py`) use fake DNS and sockets only.
+
+Not yet covered: `download/downloader.py` (card thumbnails and Single product gallery images) still
+uses plain `urllib`.
 
 ## 5. Things to leave alone unless you mean to change behavior
 
@@ -117,13 +141,13 @@ its own requests). `.env` is git-ignored.
 ```powershell
 python -m pytest
 python -m ruff check .
+python -m ruff format --check .
 python -m mypy .
 ```
 
-- Pytest and Ruff are clean; both are blocking in CI (`.github/workflows/ci.yml`).
+- All four are blocking in CI (`.github/workflows/ci.yml`) on Python 3.12, 3.13 and 3.14. Mypy runs
+  `strict` with the pydantic plugin and is clean.
 - The Ruff rule set is pinned in `pyproject.toml` so newer Ruff releases cannot change results.
-- Mypy (`strict = true`) still reports findings and is non-blocking in CI; see
-  [docs/mypy-remediation.md](docs/mypy-remediation.md).
 - UI tests use a recording stand-in for `st` (`tests/test_shop_compare_ui.py`), so layout structure
   is asserted without starting Streamlit.
 - Live behavior (real SerpApi, NVIDIA and retailer pages) is validated manually and spends credits;
@@ -140,21 +164,11 @@ python -m mypy .
 - Prices are those shown by Google Shopping and are not re-checked on the retailer site.
 - Searches are India-specific (`gl=in`, `google.co.in`, Indian retailers).
 
-## 9. Legacy and dormant code
+## 9. Repository notes
 
-Kept deliberately, not wired into the running app:
-
-- `batch/` — Excel import, per-row orchestration and ZIP packaging for a Batch (Excel) tab that was
-  removed from the UI. Nothing imports it. It is the only user of the `openpyxl` dependency and has
-  no tests. Safe to delete together with `openpyxl` if it is not wanted.
-- `search/retailers/amazon.py`, `flipkart.py`, `zepto.py` — older Playwright-based retailer
-  scrapers, left in place as a rollback. Nothing in the active pipeline imports them. They (and the
-  type imports in a few active modules) are why `playwright` is still a dependency; no browser
-  binary is needed at runtime.
-
-## 10. Repository notes
-
-- Licensed under MIT (see `LICENSE`).
-- `images/` (generated output) and `.env` are git-ignored.
-- `.claude/launch.json` defines the Streamlit dev-server entry; `.claude/settings.local.json` is
-  git-ignored.
+- MIT licensed (see `LICENSE`).
+- `images/` (generated output) and `.env` are git-ignored, as is the whole `.claude/` folder
+  (machine-specific). Shared assistant instructions live in `CLAUDE.md`.
+- Removed as dead code: the Batch (Excel) package (`batch/`, and with it the `openpyxl`
+  dependency) and the old Playwright retailer scrapers (and with them the `playwright` dependency).
+  Their history is in git.

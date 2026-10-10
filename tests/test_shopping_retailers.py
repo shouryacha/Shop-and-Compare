@@ -167,13 +167,23 @@ def test_aliases_are_pre_normalized_and_unique() -> None:
         ("bigbasket.com", "BigBasket"),
     ],
 )
-def test_live_seller_spellings_of_approved_retailers_are_recognized(source: str, retailer: str) -> None:
+def test_live_seller_spellings_of_approved_retailers_are_recognized(
+    source: str, retailer: str
+) -> None:
     assert canonical_retailer(source) == retailer
 
 
 @pytest.mark.parametrize(
     "source",
-    ["Nykaa Man", "nykaaman.com", "TATA CLiQ LUXURY", "luxe.ajio.com", "StarQuik", "Hyperpure", "FarmLokal"],
+    [
+        "Nykaa Man",
+        "nykaaman.com",
+        "TATA CLiQ LUXURY",
+        "luxe.ajio.com",
+        "StarQuik",
+        "Hyperpure",
+        "FarmLokal",
+    ],
 )
 def test_live_sub_storefronts_and_other_sellers_stay_unapproved(source: str) -> None:
     assert canonical_retailer(source) is None

@@ -210,12 +210,16 @@ class ProductImageSelectionStage:
         provider_used = {"search": self._search_provider.name, "vision": self._vision_model.name}
 
         if best_front is not None:
-            front_path = await self._storage.persist_image(best_front.downloaded, product_name, "front")
+            front_path = await self._storage.persist_image(
+                best_front.downloaded, product_name, "front"
+            )
             metadata["front"] = self._verdict_metadata(best_front)
             provider_used["front_source"] = best_front.downloaded.candidate.source_provider
 
         if best_back is not None:
-            back_path = await self._storage.persist_image(best_back.downloaded, product_name, "back")
+            back_path = await self._storage.persist_image(
+                best_back.downloaded, product_name, "back"
+            )
             metadata["back"] = self._verdict_metadata(best_back)
             provider_used["back_source"] = best_back.downloaded.candidate.source_provider
 
@@ -248,4 +252,3 @@ class ProductImageSelectionStage:
             "weight": extra.get("weight"),
             "model_used": classified.verdict.model_name,
         }
-

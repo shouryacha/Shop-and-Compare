@@ -44,17 +44,10 @@ For each retailer, in priority order (Amazon -> Google Shopping):
        (the Google Images comparative-selection workflow via SerpApi),
        unchanged.
 
-Both active retailers are SerpApi-backed and never touch the `page` argument
-threaded through `_try_retailer`/`_try_candidate` (kept only for contract
-parity with the dormant Playwright-based modules below) - so `run()` no
-longer launches a Playwright browser at all; `page` is passed through as
-`None`.
-
-Flipkart and Zepto were removed from the active registry (they required
-Playwright and their own native-search mechanics); `search/retailers/
-flipkart.py` and `search/retailers/zepto.py` are left in place, unreferenced,
-as an easy rollback - same treatment already given to the old Playwright-based
-`search/retailers/amazon.py`.
+Both retailers are SerpApi-backed and never touch the `page` argument
+threaded through `_try_retailer`/`_try_candidate` (part of the shared retailer
+contract, see `search/retailers/__init__.py`) - no browser is involved
+anywhere, and `page` is always passed as `None`.
 
 Depends concretely on `classifier.nemotron.NemotronVisionModel` (for
 `verify_product_match`) and `storage.local_filesystem.LocalFilesystemStorage`
@@ -74,11 +67,16 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from playwright.async_api import Page
-
 from classifier.nemotron import NemotronVisionModel
 from interfaces import ImageDownloader
-from models import DownloadedImage, ImageCandidate, ProductImageResult, ProductMatchVerdict, SearchIntent, SearchQuery
+from models import (
+    DownloadedImage,
+    ImageCandidate,
+    ProductImageResult,
+    ProductMatchVerdict,
+    SearchIntent,
+    SearchQuery,
+)
 from search.query_normalizer import normalize_for_search
 from search.retailers import amazon_serpapi, google_shopping_serpapi
 from selection_stage import ProductImageSelectionStage
@@ -88,17 +86,14 @@ from verification_overrides import OverrideInfo, apply_deterministic_checks
 logger = logging.getLogger(__name__)
 
 # Priority order: Amazon -> Google Shopping -> Google Images (fallback).
-# Flipkart and Zepto were removed from this active registry (Playwright-
-# based, replaced by an all-SerpApi retailer lineup) - their modules are
-# left in place, unreferenced, as an easy rollback (see module docstring).
-# Blinkit and BigBasket remain removed entirely (never fully working in this
-# sandbox). Both retailers here are SerpApi-backed and ignore the `page`
-# argument entirely - it's kept only for contract parity with the dormant
-# Playwright-based modules. The old Playwright-based Amazon module
-# (`search/retailers/amazon.py`) is likewise left in place, unreferenced, as
-# an easy rollback if needed.
+# Both retailers here are SerpApi-backed and ignore the `page` argument
+# entirely - it is only part of the shared retailer contract.
 _RETAILERS: list[dict[str, Any]] = [
-    {"name": "Amazon", "search_fn": amazon_serpapi.search_product_page, "extractor": amazon_serpapi.extract_gallery},
+    {
+        "name": "Amazon",
+        "search_fn": amazon_serpapi.search_product_page,
+        "extractor": amazon_serpapi.extract_gallery,
+    },
     {
         "name": "Google Shopping",
         "search_fn": google_shopping_serpapi.search_product_page,
@@ -178,12 +173,12 @@ class RetailerGalleryStage:
         if search_query_text != product_name:
             logger.info("Normalized search query: %r -> %r", product_name, search_query_text)
 
-        # Neither active retailer touches `page` (both are SerpApi-backed),
-        # so there's no Playwright browser to launch here anymore - see
-        # module docstring. `page` is still threaded through for contract
-        # parity with the dormant Playwright-based retailer modules.
+        # Neither retailer touches `page` (both are SerpApi-backed), so it is
+        # always None - see module docstring.
         for retailer in _RETAILERS:
-            result = await self._try_retailer(None, retailer, search_query_text, product_name, erp_brand)
+            result = await self._try_retailer(
+                None, retailer, search_query_text, product_name, erp_brand
+            )
             if result is not None:
                 return result
 
@@ -211,7 +206,7 @@ class RetailerGalleryStage:
 
     async def _try_retailer(
         self,
-        page: Page | None,
+        page: object | None,
         retailer: dict[str, Any],
         search_query_text: str,
         product_name: str,
@@ -249,18 +244,34 @@ class RetailerGalleryStage:
             logger.warning("[%s] native search failed: %s", name, exc)
             return None
 
-        logger.info("[%s] search_fn returned %d candidate(s): %r", name, len(candidate_urls), candidate_urls)
+        logger.info(
+            "[%s] search_fn returned %d candidate(s): %r", name, len(candidate_urls), candidate_urls
+        )
 
         if not candidate_urls:
             logger.info("[%s] no product page found in search results", name)
             return None
 
         candidate_total = len(candidate_urls)
-        for candidate_index, product_url in enumerate(candidate_urls[:_MAX_CANDIDATES_PER_RETAILER]):
+        for candidate_index, product_url in enumerate(
+            candidate_urls[:_MAX_CANDIDATES_PER_RETAILER]
+        ):
             candidate_number = candidate_index + 1
-            logger.info("[%s] trying candidate %d/%d: %s", name, candidate_number, candidate_total, product_url)
+            logger.info(
+                "[%s] trying candidate %d/%d: %s",
+                name,
+                candidate_number,
+                candidate_total,
+                product_url,
+            )
             result = await self._try_candidate(
-                page, retailer, product_url, product_name, erp_brand, candidate_number, candidate_total
+                page,
+                retailer,
+                product_url,
+                product_name,
+                erp_brand,
+                candidate_number,
+                candidate_total,
             )
             if result is not None:
                 return result
@@ -274,7 +285,7 @@ class RetailerGalleryStage:
 
     async def _try_candidate(
         self,
-        page: Page | None,
+        page: object | None,
         retailer: dict[str, Any],
         product_url: str,
         product_name: str,
@@ -293,14 +304,26 @@ class RetailerGalleryStage:
         try:
             gallery = await retailer["extractor"](page, product_url)
         except Exception as exc:  # noqa: BLE001 - try the next candidate
-            logger.warning("[%s] failed to open/extract product page %s: %s", name, product_url, exc)
+            logger.warning(
+                "[%s] failed to open/extract product page %s: %s", name, product_url, exc
+            )
             return None
 
         if not gallery.image_urls:
-            logger.info("[%s] no gallery images found at %s (%s)", name, product_url, gallery.source_description)
+            logger.info(
+                "[%s] no gallery images found at %s (%s)",
+                name,
+                product_url,
+                gallery.source_description,
+            )
             return None
 
-        logger.info("[%s] found %d gallery image(s) (%s)", name, len(gallery.image_urls), gallery.source_description)
+        logger.info(
+            "[%s] found %d gallery image(s) (%s)",
+            name,
+            len(gallery.image_urls),
+            gallery.source_description,
+        )
 
         query = SearchQuery(text=product_name, intent=SearchIntent.GENERIC)
 
@@ -333,7 +356,9 @@ class RetailerGalleryStage:
             # unavailable or the two brands aren't confidently different.
             match_verdict, override_info = apply_deterministic_checks(match_verdict, erp_brand)
             if override_info is not None:
-                self._log_override(name, candidate_number, candidate_total, product_url, override_info)
+                self._log_override(
+                    name, candidate_number, candidate_total, product_url, override_info
+                )
 
             if not match_verdict.is_match or match_verdict.confidence < self._min_match_confidence:
                 logger.info(
@@ -402,7 +427,12 @@ class RetailerGalleryStage:
         )
 
     async def _download_one(
-        self, url: str, retailer_name: str, query: SearchQuery, product_url: str, destination_dir: Path
+        self,
+        url: str,
+        retailer_name: str,
+        query: SearchQuery,
+        product_url: str,
+        destination_dir: Path,
     ) -> DownloadedImage | None:
         """Download a single gallery image URL, returning `None` on failure."""
         candidate = ImageCandidate(
@@ -424,7 +454,10 @@ class RetailerGalleryStage:
     ) -> list[DownloadedImage]:
         """Download every remaining gallery image concurrently, skipping individual failures."""
         results = await asyncio.gather(
-            *(self._download_one(url, retailer_name, query, product_url, destination_dir) for url in image_urls)
+            *(
+                self._download_one(url, retailer_name, query, product_url, destination_dir)
+                for url in image_urls
+            )
         )
         return [d for d in results if d is not None]
 

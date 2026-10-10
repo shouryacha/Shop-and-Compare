@@ -48,7 +48,9 @@ def _set_api_key(monkeypatch: pytest.MonkeyPatch, value: str | None) -> None:
 # --- search_product_page ----------------------------------------------------
 
 
-def test_search_product_page_filters_sponsored_and_caps_at_five(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_search_product_page_filters_sponsored_and_caps_at_five(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     _set_api_key(monkeypatch, "test-key")
     organic_results = [
         {"asin": "SPON", "link": "https://www.amazon.in/dp/SPON123456", "sponsored": True},
@@ -64,7 +66,7 @@ def test_search_product_page_filters_sponsored_and_caps_at_five(monkeypatch: pyt
     with patch.object(
         amazon_serpapi, "_fetch_json", return_value={"organic_results": organic_results}
     ) as mock_fetch:
-        result = _run(amazon_serpapi.search_product_page(None, "test query"))  # type: ignore[arg-type]
+        result = _run(amazon_serpapi.search_product_page(None, "test query"))
 
     assert result == [f"https://www.amazon.in/dp/A{i}23456789" for i in range(5)]
     called_url = mock_fetch.call_args[0][0]
@@ -83,8 +85,10 @@ def test_search_product_page_prefers_link_clean_over_link(monkeypatch: pytest.Mo
             "sponsored": False,
         }
     ]
-    with patch.object(amazon_serpapi, "_fetch_json", return_value={"organic_results": organic_results}):
-        result = _run(amazon_serpapi.search_product_page(None, "q"))  # type: ignore[arg-type]
+    with patch.object(
+        amazon_serpapi, "_fetch_json", return_value={"organic_results": organic_results}
+    ):
+        result = _run(amazon_serpapi.search_product_page(None, "q"))
     assert result == ["https://www.amazon.in/dp/A123456789"]
 
 
@@ -93,7 +97,7 @@ def test_search_product_page_returns_empty_list_when_no_organic_results(
 ) -> None:
     _set_api_key(monkeypatch, "test-key")
     with patch.object(amazon_serpapi, "_fetch_json", return_value={}):
-        result = _run(amazon_serpapi.search_product_page(None, "q"))  # type: ignore[arg-type]
+        result = _run(amazon_serpapi.search_product_page(None, "q"))
     assert result == []
 
 
@@ -103,8 +107,10 @@ def test_search_product_page_dedupes_identical_links(monkeypatch: pytest.MonkeyP
         {"asin": "A123456789", "link": "https://www.amazon.in/dp/A123456789", "sponsored": False},
         {"asin": "A123456789", "link": "https://www.amazon.in/dp/A123456789", "sponsored": False},
     ]
-    with patch.object(amazon_serpapi, "_fetch_json", return_value={"organic_results": organic_results}):
-        result = _run(amazon_serpapi.search_product_page(None, "q"))  # type: ignore[arg-type]
+    with patch.object(
+        amazon_serpapi, "_fetch_json", return_value={"organic_results": organic_results}
+    ):
+        result = _run(amazon_serpapi.search_product_page(None, "q"))
     assert result == ["https://www.amazon.in/dp/A123456789"]
 
 
@@ -117,9 +123,7 @@ def test_extract_gallery_reads_all_thumbnails(monkeypatch: pytest.MonkeyPatch) -
     with patch.object(
         amazon_serpapi, "_fetch_json", return_value={"product_results": {"thumbnails": thumbnails}}
     ) as mock_fetch:
-        gallery = _run(
-            amazon_serpapi.extract_gallery(None, "https://www.amazon.in/dp/B0756D1D39")  # type: ignore[arg-type]
-        )
+        gallery = _run(amazon_serpapi.extract_gallery(None, "https://www.amazon.in/dp/B0756D1D39"))
 
     assert gallery.retailer == "Amazon"
     assert gallery.image_urls == thumbnails
@@ -133,10 +137,12 @@ def test_extract_gallery_reads_all_thumbnails(monkeypatch: pytest.MonkeyPatch) -
 def test_extract_gallery_handles_gp_product_url_shape(monkeypatch: pytest.MonkeyPatch) -> None:
     _set_api_key(monkeypatch, "test-key")
     with patch.object(
-        amazon_serpapi, "_fetch_json", return_value={"product_results": {"thumbnails": ["https://x/i.jpg"]}}
+        amazon_serpapi,
+        "_fetch_json",
+        return_value={"product_results": {"thumbnails": ["https://x/i.jpg"]}},
     ) as mock_fetch:
         gallery = _run(
-            amazon_serpapi.extract_gallery(  # type: ignore[arg-type]
+            amazon_serpapi.extract_gallery(
                 None, "https://www.amazon.in/gp/product/B0756D1D39/ref=abc"
             )
         )
@@ -147,15 +153,15 @@ def test_extract_gallery_handles_gp_product_url_shape(monkeypatch: pytest.Monkey
 def test_extract_gallery_raises_on_unparseable_url(monkeypatch: pytest.MonkeyPatch) -> None:
     _set_api_key(monkeypatch, "test-key")
     with pytest.raises(SerpApiSearchError):
-        _run(amazon_serpapi.extract_gallery(None, "https://www.amazon.in/no-asin-in-this-url"))  # type: ignore[arg-type]
+        _run(amazon_serpapi.extract_gallery(None, "https://www.amazon.in/no-asin-in-this-url"))
 
 
-def test_extract_gallery_empty_thumbnails_returns_empty_gallery(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_extract_gallery_empty_thumbnails_returns_empty_gallery(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     _set_api_key(monkeypatch, "test-key")
     with patch.object(amazon_serpapi, "_fetch_json", return_value={"product_results": {}}):
-        gallery = _run(
-            amazon_serpapi.extract_gallery(None, "https://www.amazon.in/dp/B0756D1D39")  # type: ignore[arg-type]
-        )
+        gallery = _run(amazon_serpapi.extract_gallery(None, "https://www.amazon.in/dp/B0756D1D39"))
     assert gallery.image_urls == []
 
 
@@ -175,9 +181,7 @@ def test_extract_gallery_captures_product_title(monkeypatch: pytest.MonkeyPatch)
         }
     }
     with patch.object(amazon_serpapi, "_fetch_json", return_value=payload):
-        gallery = _run(
-            amazon_serpapi.extract_gallery(None, "https://www.amazon.in/dp/B079GXGH83")  # type: ignore[arg-type]
-        )
+        gallery = _run(amazon_serpapi.extract_gallery(None, "https://www.amazon.in/dp/B079GXGH83"))
     assert gallery.product_title == "Charminar Select Basmati Rice 1 KG | Value Basmati rice"
 
 
@@ -185,9 +189,7 @@ def test_extract_gallery_missing_title_is_none(monkeypatch: pytest.MonkeyPatch) 
     _set_api_key(monkeypatch, "test-key")
     payload = {"product_results": {"thumbnails": ["https://x/i.jpg"]}}
     with patch.object(amazon_serpapi, "_fetch_json", return_value=payload):
-        gallery = _run(
-            amazon_serpapi.extract_gallery(None, "https://www.amazon.in/dp/B0756D1D39")  # type: ignore[arg-type]
-        )
+        gallery = _run(amazon_serpapi.extract_gallery(None, "https://www.amazon.in/dp/B0756D1D39"))
     assert gallery.product_title is None
 
 
@@ -197,7 +199,7 @@ def test_extract_gallery_missing_title_is_none(monkeypatch: pytest.MonkeyPatch) 
 def test_missing_api_key_raises_immediately(monkeypatch: pytest.MonkeyPatch) -> None:
     _set_api_key(monkeypatch, None)
     with pytest.raises(SerpApiInvalidApiKeyError):
-        _run(amazon_serpapi.search_product_page(None, "q"))  # type: ignore[arg-type]
+        _run(amazon_serpapi.search_product_page(None, "q"))
 
 
 # --- error classification (direct unit tests of the translation helpers) -----
@@ -236,13 +238,15 @@ def test_raise_for_error_payload_no_error_field_is_a_noop() -> None:
 
 
 def test_extract_asin_from_dp_url() -> None:
-    assert amazon_serpapi._extract_asin("https://www.amazon.in/some-title/dp/B0756D1D39/ref=sr_1_1") == (
-        "B0756D1D39"
-    )
+    assert amazon_serpapi._extract_asin(
+        "https://www.amazon.in/some-title/dp/B0756D1D39/ref=sr_1_1"
+    ) == ("B0756D1D39")
 
 
 def test_extract_asin_from_gp_product_url() -> None:
-    assert amazon_serpapi._extract_asin("https://www.amazon.in/gp/product/B0756D1D39") == "B0756D1D39"
+    assert (
+        amazon_serpapi._extract_asin("https://www.amazon.in/gp/product/B0756D1D39") == "B0756D1D39"
+    )
 
 
 def test_extract_asin_raises_when_not_found() -> None:

@@ -1,16 +1,12 @@
 """
-Amazon.in product search and gallery extraction via SerpApi - no Playwright.
+Amazon.in product search and gallery extraction via SerpApi (no browser).
 
-This is the SerpApi-based replacement for `search/retailers/amazon.py`'s
-Playwright scraping, wired in by `retailer_gallery_stage.py`'s `_RETAILERS`
-registry. It honors the exact same shared contract every retailer module
-implements (`search/retailers/__init__.py`):
+Wired in by `retailer_gallery_stage.py`'s `_RETAILERS` registry. It honors the
+shared contract every retailer module implements (`search/retailers/__init__.py`):
 `search_product_page(page, query) -> list[str]` and
 `extract_gallery(page, product_url) -> GalleryResult`, both `async`. The
-`page: Page` argument is accepted but never used - SerpApi calls are plain
-authenticated HTTP requests, no browser needed. This mirrors the existing
-precedent in `search/retailers/zepto.py`, whose functions likewise don't use
-the shared `page` directly (it opens its own isolated context instead).
+`page` argument is accepted but never used - SerpApi calls are plain
+authenticated HTTP requests, no browser needed.
 
 Two-call design, verified against SerpApi's live official documentation
 (serpapi.com/amazon-search-api, serpapi.com/amazon-product-api) before
@@ -19,12 +15,10 @@ writing this:
        (`engine=amazon`, `amazon_domain=amazon.in`) and reads
        `organic_results[]` for candidate product URLs (and their ASINs),
        skipping sponsored results via the documented `sponsored` boolean
-       field - the SerpApi equivalent of the old Playwright module's
-       "Sponsored" text-span check.
+       field.
     2. `extract_gallery()` re-derives the ASIN from the candidate's product
        URL (Amazon URLs always embed it as `/dp/<ASIN>/` or
-       `/gp/product/<ASIN>/` - the same `/dp/` assumption the old Playwright
-       module already relied on for its link selector), then calls SerpApi's
+       `/gp/product/<ASIN>/`), then calls SerpApi's
        Amazon Product API (`engine=amazon_product`, `asin=...`) and reads
        `product_results.thumbnails[]` - documented by SerpApi as "Product
        image URLs" (plural, an array), and confirmed via a live example
@@ -71,7 +65,6 @@ import urllib.parse
 import urllib.request
 from typing import Any, Final
 
-from playwright.async_api import Page
 
 from config import get_settings
 from search.retailers import GalleryResult, dedupe_preserve_order
@@ -87,14 +80,11 @@ _AMAZON_DOMAIN: Final[str] = "amazon.in"
 # Kept in sync with `retailer_gallery_stage._MAX_CANDIDATES_PER_RETAILER` -
 # that's the actual cap the caller applies; collecting the same number here
 # just avoids scanning every remaining organic result once enough candidates
-# exist. Matches the old Playwright module's `_MAX_CANDIDATES` value too.
+# exist.
 _MAX_CANDIDATES: Final[int] = 5
 
 # Amazon ASINs are 10-character alphanumeric codes, always embedded in a
-# product URL's path as either `/dp/<ASIN>/` or `/gp/product/<ASIN>/` - the
-# same `/dp/` shape the old Playwright module's link selector
-# (`a[href*="/dp/"]`) already relied on, so this is well-precedented, not a
-# new guess.
+# product URL's path as either `/dp/<ASIN>/` or `/gp/product/<ASIN>/`.
 _ASIN_PATTERN: Final[re.Pattern[str]] = re.compile(r"/(?:dp|gp/product)/([A-Z0-9]{10})")
 
 
@@ -117,7 +107,9 @@ def _extract_asin(product_url: str) -> str:
     """Pull the ASIN out of an Amazon product URL, raising a clear error if it can't be found."""
     match = _ASIN_PATTERN.search(product_url)
     if not match:
-        raise SerpApiSearchError(f"Could not extract an ASIN from Amazon product URL: {product_url!r}")
+        raise SerpApiSearchError(
+            f"Could not extract an ASIN from Amazon product URL: {product_url!r}"
+        )
     return match.group(1)
 
 
@@ -154,7 +146,7 @@ def _fetch_json(url: str) -> dict[str, Any]:
         raise SerpApiSearchError(f"Network error contacting SerpAPI: {exc}") from exc
 
     try:
-        payload = json.loads(body)
+        payload: dict[str, Any] = json.loads(body)
     except json.JSONDecodeError as exc:
         raise SerpApiSearchError(f"SerpAPI response was not valid JSON: {exc}") from exc
 
@@ -200,7 +192,7 @@ def _extract_error_message(body: bytes) -> str | None:
     return str(error) if error else None
 
 
-async def search_product_page(page: Page, query: str) -> list[str]:
+async def search_product_page(page: object | None, query: str) -> list[str]:
     """
     Search Amazon.in for `query` via SerpApi's Amazon Search API
     (`engine=amazon`) and return up to `_MAX_CANDIDATES` organic
@@ -244,7 +236,7 @@ async def search_product_page(page: Page, query: str) -> list[str]:
     return deduped
 
 
-async def extract_gallery(page: Page, product_url: str) -> GalleryResult:
+async def extract_gallery(page: object | None, product_url: str) -> GalleryResult:
     """
     Fetch the full image gallery for the Amazon product at `product_url` via
     SerpApi's Amazon Product API (`engine=amazon_product`), keyed by the

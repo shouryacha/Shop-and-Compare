@@ -14,20 +14,9 @@ describe them.
 
 Active registry (`retailer_gallery_stage.py`): Amazon -> Google Shopping ->
 Google Images (fallback) - `amazon_serpapi.py` and
-`google_shopping_serpapi.py`, both entirely SerpApi-backed, no Playwright
-involved for either.
-
-Dormant, unreferenced modules kept in place as an easy rollback: `amazon.py`
-(the original Playwright-based Amazon implementation, superseded by
-`amazon_serpapi.py`), and `flipkart.py`/`zepto.py` (removed from the active
-registry when it was rebuilt around SerpApi - both required Playwright and
-their own native-search mechanics). Every extractor in this package,
-active or dormant, was built by first opening a real, live product page (or
-making a real API call) and inspecting the actual response - none of the
-selectors/JSON paths/API fields here are guessed.
-
-Blinkit and BigBasket remain removed entirely (were never fully working in
-this sandbox - see HANDOFF.md's history).
+`google_shopping_serpapi.py`, both entirely SerpApi-backed, no browser
+involved for either. Every extractor here was built against a real API
+response - none of the JSON paths/API fields are guessed.
 """
 
 from __future__ import annotations

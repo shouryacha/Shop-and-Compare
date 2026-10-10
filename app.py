@@ -33,8 +33,10 @@ import json
 import logging
 import re
 from pathlib import Path
+from typing import Any, Literal
 
 import streamlit as st
+from streamlit.delta_generator import DeltaGenerator
 
 from classifier.nemotron import VisionModelError
 from models import (
@@ -65,22 +67,67 @@ _GALLERY_COLUMNS = 4
 # still available, unabridged, in the "View logs" expander).
 # --------------------------------------------------------------------------
 _FRIENDLY_LOG_PATTERNS: list[tuple[re.Pattern[str], str]] = [
-    (re.compile(r"^Starting retailer-first retrieval"), "\U0001f50d Searching retailers for a matching product"),
-    (re.compile(r"^\[(?P<retailer>[^\]]+)\] trying candidate (?P<idx>\d+)/(?P<count>\d+):"), "\U0001f50e Checking candidate {idx}/{count} on {retailer}"),
-    (re.compile(r"^\[(?P<retailer>[^\]]+)\] found \d+ gallery image"), "✅ Extracted the image gallery from {retailer}"),
-    (re.compile(r"^\[(?P<retailer>[^\]]+)\] accepted"), "✅ {retailer} accepted - downloading the full gallery"),
-    (re.compile(r"^\[(?P<retailer>[^\]]+)\] rejected:"), "❌ {retailer} rejected - trying the next retailer"),
-    (re.compile(r"^\[(?P<retailer>[^\]]+)\] no product page found"), "❌ No product page found on {retailer}"),
-    (re.compile(r"^\[(?P<retailer>[^\]]+)\] no gallery images found"), "❌ No image gallery found on {retailer}"),
-    (re.compile(r"^\[(?P<retailer>[^\]]+)\] (native )?search failed"), "⚠️ Search failed on {retailer}"),
-    (re.compile(r"^\[(?P<retailer>[^\]]+)\] failed to open/extract product page"), "⚠️ Could not open the product page on {retailer}"),
-    (re.compile(r"^\[(?P<retailer>[^\]]+)\] could not download the first gallery image"), "⚠️ Could not download an image from {retailer}"),
-    (re.compile(r"^\[(?P<retailer>[^\]]+)\] product-match verification failed"), "⚠️ Verification error on {retailer} - trying the next retailer"),
-    (re.compile(r"^No retailer produced an accepted product page"), "↩️ No retailer matched - falling back to Google Images"),
+    (
+        re.compile(r"^Starting retailer-first retrieval"),
+        "\U0001f50d Searching retailers for a matching product",
+    ),
+    (
+        re.compile(r"^\[(?P<retailer>[^\]]+)\] trying candidate (?P<idx>\d+)/(?P<count>\d+):"),
+        "\U0001f50e Checking candidate {idx}/{count} on {retailer}",
+    ),
+    (
+        re.compile(r"^\[(?P<retailer>[^\]]+)\] found \d+ gallery image"),
+        "✅ Extracted the image gallery from {retailer}",
+    ),
+    (
+        re.compile(r"^\[(?P<retailer>[^\]]+)\] accepted"),
+        "✅ {retailer} accepted - downloading the full gallery",
+    ),
+    (
+        re.compile(r"^\[(?P<retailer>[^\]]+)\] rejected:"),
+        "❌ {retailer} rejected - trying the next retailer",
+    ),
+    (
+        re.compile(r"^\[(?P<retailer>[^\]]+)\] no product page found"),
+        "❌ No product page found on {retailer}",
+    ),
+    (
+        re.compile(r"^\[(?P<retailer>[^\]]+)\] no gallery images found"),
+        "❌ No image gallery found on {retailer}",
+    ),
+    (
+        re.compile(r"^\[(?P<retailer>[^\]]+)\] (native )?search failed"),
+        "⚠️ Search failed on {retailer}",
+    ),
+    (
+        re.compile(r"^\[(?P<retailer>[^\]]+)\] failed to open/extract product page"),
+        "⚠️ Could not open the product page on {retailer}",
+    ),
+    (
+        re.compile(r"^\[(?P<retailer>[^\]]+)\] could not download the first gallery image"),
+        "⚠️ Could not download an image from {retailer}",
+    ),
+    (
+        re.compile(r"^\[(?P<retailer>[^\]]+)\] product-match verification failed"),
+        "⚠️ Verification error on {retailer} - trying the next retailer",
+    ),
+    (
+        re.compile(r"^No retailer produced an accepted product page"),
+        "↩️ No retailer matched - falling back to Google Images",
+    ),
     (re.compile(r"^Starting image selection stage"), "\U0001f50d Searching Google Images"),
-    (re.compile(r"^Comparing \d+ candidate\(s\) for product=.* side=(?P<side>\w+)"), "\U0001f504 Comparing {side} candidates with the vision model"),
-    (re.compile(r"^Selected candidate index=.* for side=(?P<side>\w+)"), "✅ Selected the best {side} image"),
-    (re.compile(r"^Verifying product match for image="), "\U0001f504 Verifying the product with the vision model"),
+    (
+        re.compile(r"^Comparing \d+ candidate\(s\) for product=.* side=(?P<side>\w+)"),
+        "\U0001f504 Comparing {side} candidates with the vision model",
+    ),
+    (
+        re.compile(r"^Selected candidate index=.* for side=(?P<side>\w+)"),
+        "✅ Selected the best {side} image",
+    ),
+    (
+        re.compile(r"^Verifying product match for image="),
+        "\U0001f504 Verifying the product with the vision model",
+    ),
     (re.compile(r"^Persisted (?P<side>front|back) image"), "✅ Saved the {side} image"),
     (re.compile(r"^Persisted \d+ gallery image"), "✅ Saved the gallery images"),
     (re.compile(r"^Wrote metadata for"), "✅ Wrote metadata.json"),
@@ -103,7 +150,9 @@ class _StreamlitProgressHandler(logging.Handler):
     placeholders: the raw log, and the friendly, pattern-matched checklist.
     """
 
-    def __init__(self, friendly_placeholder, raw_placeholder) -> None:
+    def __init__(
+        self, friendly_placeholder: DeltaGenerator, raw_placeholder: DeltaGenerator
+    ) -> None:
         super().__init__()
         self._friendly_placeholder = friendly_placeholder
         self._raw_placeholder = raw_placeholder
@@ -117,7 +166,9 @@ class _StreamlitProgressHandler(logging.Handler):
         friendly = _friendly_message(record)
         if friendly:
             self._friendly_lines.append(friendly)
-            self._friendly_placeholder.markdown("\n".join(f"- {line}" for line in self._friendly_lines))
+            self._friendly_placeholder.markdown(
+                "\n".join(f"- {line}" for line in self._friendly_lines)
+            )
 
 
 def _run_pipeline(
@@ -205,7 +256,7 @@ def _render_gallery(image_paths: list[Path]) -> None:
                         _preview_dialog(existing_paths)
 
 
-def _render_summary(result: ProductImageResult, info: dict) -> None:
+def _render_summary(result: ProductImageResult, info: dict[str, Any]) -> None:
     """Clean summary cards: product name, retailer used, verification confidence, gallery count, product URL."""
     if info["mode"] == "retailer_gallery":
         retailer_label = info["retailer"]
@@ -217,7 +268,9 @@ def _render_summary(result: ProductImageResult, info: dict) -> None:
         confidence_label = "Verification confidence"
     else:
         retailer_label = "Google Images (fallback)"
-        side_confidences = [c for c in (result.front_confidence, result.back_confidence) if c is not None]
+        side_confidences = [
+            c for c in (result.front_confidence, result.back_confidence) if c is not None
+        ]
         confidence = sum(side_confidences) / len(side_confidences) if side_confidences else None
         confidence_label = "Verification confidence (avg)"
 
@@ -308,9 +361,16 @@ def _render_single_product_tab() -> None:
 
 # Badge colour and label for each classification. The label is a small,
 # secondary tag on the card - the price is the dominant element.
-_CLASSIFICATION_DISPLAY: dict[ShoppingMatchClassification, tuple[str, str]] = {
+_BadgeColor = Literal[
+    "red", "orange", "yellow", "blue", "green", "violet", "gray", "grey", "primary"
+]
+
+_CLASSIFICATION_DISPLAY: dict[ShoppingMatchClassification, tuple[_BadgeColor, str]] = {
     ShoppingMatchClassification.SAME_PRODUCT: ("green", "Same product"),
-    ShoppingMatchClassification.SAME_PRODUCT_DIFFERENT_SIZE: ("orange", "Same product, different size"),
+    ShoppingMatchClassification.SAME_PRODUCT_DIFFERENT_SIZE: (
+        "orange",
+        "Same product, different size",
+    ),
     ShoppingMatchClassification.RELATED_PRODUCT: ("blue", "Related alternative"),
     ShoppingMatchClassification.DIFFERENT_VARIANT: ("red", "Different product"),
 }
@@ -319,7 +379,10 @@ _TAGLINE = "Compare prices from trusted retailers. Find the right product, faste
 
 # Which classifications belong in the primary "Comparable offers" section.
 _COMPARABLE_CLASSIFICATIONS = frozenset(
-    {ShoppingMatchClassification.SAME_PRODUCT, ShoppingMatchClassification.SAME_PRODUCT_DIFFERENT_SIZE}
+    {
+        ShoppingMatchClassification.SAME_PRODUCT,
+        ShoppingMatchClassification.SAME_PRODUCT_DIFFERENT_SIZE,
+    }
 )
 
 # Every card's image gets this width, so images never stretch a card; the
@@ -371,7 +434,9 @@ def _render_shopping_comparison_tab() -> None:
             key="shopping_product_name",
             width="stretch",
         )
-        compare_clicked = st.button("Compare offers", type="primary", icon=":material/shopping_cart:")
+        compare_clicked = st.button(
+            "Compare offers", type="primary", icon=":material/shopping_cart:"
+        )
 
     if compare_clicked:
         cleaned_name = product_name.strip()
@@ -403,9 +468,13 @@ def _group_offers(
     """
     ranked = rank_comparison_offers(result.offers)
     comparable = [c for c in ranked if c.verdict.classification in _COMPARABLE_CLASSIFICATIONS]
-    related = [c for c in ranked if c.verdict.classification == ShoppingMatchClassification.RELATED_PRODUCT]
+    related = [
+        c for c in ranked if c.verdict.classification == ShoppingMatchClassification.RELATED_PRODUCT
+    ]
     hidden = sum(
-        1 for c in result.offers if c.verdict.classification == ShoppingMatchClassification.DIFFERENT_VARIANT
+        1
+        for c in result.offers
+        if c.verdict.classification == ShoppingMatchClassification.DIFFERENT_VARIANT
     )
     return comparable, related, hidden, len(result.unclassified_offers)
 
@@ -442,7 +511,9 @@ def _render_comparison_result(result: ShoppingComparisonResult) -> None:
         st.space("small")
         st.markdown(f"**Comparable offers** · {len(comparable)}")
         for classified in comparable:
-            _render_offer_row(classified.offer, *_CLASSIFICATION_DISPLAY[classified.verdict.classification])
+            _render_offer_row(
+                classified.offer, *_CLASSIFICATION_DISPLAY[classified.verdict.classification]
+            )
 
     if related:
         st.space("medium" if comparable else "small")
@@ -450,7 +521,9 @@ def _render_comparison_result(result: ShoppingComparisonResult) -> None:
         st.caption("Not the exact product, but worth considering")
         for classified in related:
             _render_offer_row(
-                classified.offer, *_CLASSIFICATION_DISPLAY[classified.verdict.classification], compact=True
+                classified.offer,
+                *_CLASSIFICATION_DISPLAY[classified.verdict.classification],
+                compact=True,
             )
 
     if counts_caption:
@@ -458,7 +531,9 @@ def _render_comparison_result(result: ShoppingComparisonResult) -> None:
         st.caption(counts_caption)
 
 
-def _render_offer_row(offer: ShoppingOffer, badge_color: str, label: str, *, compact: bool = False) -> None:
+def _render_offer_row(
+    offer: ShoppingOffer, badge_color: _BadgeColor, label: str, *, compact: bool = False
+) -> None:
     """
     One offer card: image on the left, title and retailer in the middle, the
     PRICE large on the right with the "View offer" button directly below it.
@@ -489,7 +564,7 @@ def _render_offer_row(offer: ShoppingOffer, badge_color: str, label: str, *, com
             )
 
 
-def main() -> None:
+def _render_page_header() -> None:
     st.set_page_config(
         page_title="Shop & Compare",
         page_icon=":material/shopping_cart:",
@@ -497,6 +572,10 @@ def main() -> None:
     )
     st.title("Shop & Compare", anchor=False)
     st.caption(_TAGLINE)
+
+
+def main() -> None:
+    _render_page_header()
 
     tab_single, tab_shop = st.tabs(["Single product", "Shop & Compare"])
 

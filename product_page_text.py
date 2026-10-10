@@ -9,6 +9,12 @@ timeout, a byte cap on the download and a character cap on the result.
 `fetch_product_page_text` never raises - any failure returns `None` and the
 caller falls back to the listing's title/retailer/price/image.
 
+The URL comes from search results, so it is untrusted: fetching goes through
+`utils.safe_http`, which refuses localhost, private, link-local and cloud-
+metadata addresses (for the URL itself, every redirect hop and every address
+the host resolves to), limits redirects, and caps response size and total
+time. An unsafe URL is handled exactly like an unreachable one.
+
 Search-engine result pages are not product pages and are never fetched.
 Google Shopping's own `product_link` is one of these (a google.* results
 page whose title mostly repeats the search query, which would bias the
@@ -23,27 +29,45 @@ import asyncio
 import json
 import logging
 import re
-import urllib.parse
-import urllib.request
 from collections.abc import Iterator
 from html.parser import HTMLParser
 from typing import Any, Final
+
+from utils import safe_http
 
 logger = logging.getLogger(__name__)
 
 MAX_PAGE_TEXT_CHARS: Final[int] = 700
 
 _FETCH_TIMEOUT_SECONDS: Final[float] = 8.0
+_TOTAL_FETCH_TIMEOUT_SECONDS: Final[float] = 15.0
 _MAX_HTML_BYTES: Final[int] = 400_000
-_USER_AGENT: Final[str] = "Mozilla/5.0 (compatible; ProductImageRetriever/0.1)"
+_USER_AGENT: Final[str] = "Mozilla/5.0 (compatible; ShopAndCompare/0.1)"
 
 _MIN_VISIBLE_CHUNK_CHARS: Final[int] = 40
 _WORD = re.compile(r"\w+")
 
-_META_DESCRIPTION_KEYS: Final[tuple[str, ...]] = ("description", "og:description", "twitter:description")
+_META_DESCRIPTION_KEYS: Final[tuple[str, ...]] = (
+    "description",
+    "og:description",
+    "twitter:description",
+)
 # Content inside these tags is never product text.
 _SKIPPED_TAGS: Final[frozenset[str]] = frozenset(
-    {"script", "style", "noscript", "svg", "template", "nav", "header", "footer", "form", "button", "select", "iframe"}
+    {
+        "script",
+        "style",
+        "noscript",
+        "svg",
+        "template",
+        "nav",
+        "header",
+        "footer",
+        "form",
+        "button",
+        "select",
+        "iframe",
+    }
 )
 
 
@@ -144,7 +168,9 @@ def _visible_product_text(parts: list[str], about_words: set[str] | None) -> str
     return " ".join(chunks)
 
 
-def extract_product_text(html: str, max_chars: int = MAX_PAGE_TEXT_CHARS, about: str | None = None) -> str:
+def extract_product_text(
+    html: str, max_chars: int = MAX_PAGE_TEXT_CHARS, about: str | None = None
+) -> str:
     """
     A single-line summary of the product information in `html`, at most
     `max_chars` long: page title, JSON-LD Product name/brand/description,
@@ -167,7 +193,9 @@ def extract_product_text(html: str, max_chars: int = MAX_PAGE_TEXT_CHARS, about:
         logger.debug("[Product page] HTML parsing stopped early: %s", exc)
 
     about_words = _words(about) if about else None
-    meta_description = next((parser.meta[key] for key in _META_DESCRIPTION_KEYS if key in parser.meta), "")
+    meta_description = next(
+        (parser.meta[key] for key in _META_DESCRIPTION_KEYS if key in parser.meta), ""
+    )
     fields = [
         ("Page title", _clean("".join(parser.title_parts))),
         *_json_ld_product_fields(parser.json_ld_blocks),
@@ -191,23 +219,25 @@ def extract_product_text(html: str, max_chars: int = MAX_PAGE_TEXT_CHARS, about:
 
 
 def is_product_page_url(url: str) -> bool:
-    """http(s) only, and not a search-engine results page (see module docstring)."""
-    parts = urllib.parse.urlsplit(url)
-    if parts.scheme not in ("http", "https") or not parts.hostname:
+    """A safe-to-fetch http(s) URL (see `utils.safe_http`) that is not a search-engine results page."""
+    try:
+        parts = safe_http.check_url(url)
+    except safe_http.UnsafeURLError:
         return False
-    return "google" not in parts.hostname.lower().split(".")
+    return "google" not in (parts.hostname or "").lower().split(".")
 
 
 def _fetch_html(url: str) -> str:
-    """Blocking GET (run via `asyncio.to_thread`). Raises on any failure or non-HTML response."""
-    request = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT, "Accept": "text/html"})
-    with urllib.request.urlopen(request, timeout=_FETCH_TIMEOUT_SECONDS) as response:
-        content_type = response.headers.get_content_type()
-        if "html" not in content_type:
-            raise ValueError(f"not an HTML page (content type {content_type})")
-        body = response.read(_MAX_HTML_BYTES)
-        charset = response.headers.get_content_charset() or "utf-8"
-    return body.decode(charset, errors="replace")
+    """Blocking GET (run via `asyncio.to_thread`). Raises on any failure, unsafe URL or non-HTML response."""
+    response = safe_http.fetch(
+        url,
+        headers={"User-Agent": _USER_AGENT, "Accept": "text/html"},
+        timeout=_FETCH_TIMEOUT_SECONDS,
+        total_timeout=_TOTAL_FETCH_TIMEOUT_SECONDS,
+        max_bytes=_MAX_HTML_BYTES,
+        require_content_type="html",
+    )
+    return response.body.decode(response.charset or "utf-8", errors="replace")
 
 
 async def fetch_product_page_text(
