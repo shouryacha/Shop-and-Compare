@@ -1,0 +1,72 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "shop-and-compare"
+version = "0.1.0"
+description = "Compare prices for a product across trusted Indian retailers, with LLM-checked product matching, plus verified product-image retrieval."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.12"
+
+dependencies = [
+    "pydantic>=2.7",
+    "pydantic-settings>=2.2",
+    "streamlit>=1.35",
+    "openpyxl>=3.1",
+    "playwright>=1.40",
+    "pillow>=10.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "mypy>=1.10",
+    "ruff>=0.5",
+]
+
+[tool.uv]
+package = true
+
+# Flat layout with several top-level modules and packages: list them explicitly
+# so `pip install -e .` / `uv sync` cannot trip over setuptools auto-discovery.
+[tool.setuptools]
+py-modules = [
+    "app",
+    "config",
+    "interfaces",
+    "models",
+    "product_page_text",
+    "prompts",
+    "retailer_gallery_stage",
+    "run",
+    "selection_stage",
+    "shopping_comparison_stage",
+    "shopping_retailers",
+    "verification_overrides",
+]
+packages = [
+    "batch",
+    "classifier",
+    "download",
+    "search",
+    "search.retailers",
+    "storage",
+    "utils",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+# Pinned to Ruff's long-standing default rule set so a newer Ruff release that
+# widens its defaults cannot suddenly fail an unchanged codebase.
+select = ["E4", "E7", "E9", "F"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true

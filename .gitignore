@@ -1,0 +1,52 @@
+# --- Secrets ---------------------------------------------------------------
+.env
+.env.*
+!.env.example
+
+# --- Python ------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# --- Virtual environments ----------------------------------------------------
+.venv/
+venv/
+env/
+
+# --- Tool caches ---------------------------------------------------------
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# --- Logs, scratch and debug dumps -------------------------------------------
+*.log
+logs/
+tmp/
+*.tmp
+_debug_*.json
+
+# --- Generated application output ---------------------------------------
+# Real product images/metadata retrieved by the pipeline - regeneratable by
+# re-running it, not source. Large binaries and scraped third-party photos
+# don't belong in version control.
+images/
+
+# --- Playwright ------------------------------------------------------------
+/test-results/
+/playwright-report/
+/playwright/.cache/
+
+# --- Editors / OS -----------------------------------------------------------
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# --- Claude Code (personal/local dev config, not project config) -------------
+.claude/settings.local.json

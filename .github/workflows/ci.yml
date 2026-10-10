@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install --group dev
+
+      - name: Ruff (lint)
+        run: ruff check .
+
+      - name: Pytest
+        run: pytest tests/ -q
+
+      - name: Mypy (type check)
+        # Non-blocking for now: pre-existing strict-mode findings, summarized
+        # in docs/mypy-remediation.md. Reported on every run so they stay
+        # visible. Remove `continue-on-error` once they are cleared, so type
+        # errors block merges like ruff and pytest already do.
+        run: mypy .
+        continue-on-error: true
